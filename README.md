@@ -4,6 +4,11 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.36+-red)](https://streamlit.io)
 
+
+## 🎥 Demo Video
+
+**Watch MemoryCare in Action**: [[Link to your demo video]](https://youtu.be/eRqnBM146YU)
+
 > **Dementia care powered by memories that last—because every moment matters**
 
 MemoryCare transforms dementia and Alzheimer's care by creating an AI companion that truly remembers. Using **MemMachine's persistent memory layer**, our agent learns about each patient over time, recalls personal details naturally in conversation, and helps them maintain independence through medication reminders and goal tracking. While especially useful for patients with dementia or Alzheimer's, MemoryCare can prove useful for any and all people.
