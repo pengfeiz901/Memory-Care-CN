@@ -7,7 +7,7 @@
 
 ## 🎥 Demo Video
 
-**Watch MemoryCare in Action**: [[Link to your demo video]](https://youtu.be/eRqnBM146YU)
+**Watch MemoryCare in Action**: https://youtu.be/eRqnBM146YU
 
 > **Dementia care powered by memories that last—because every moment matters**
 
