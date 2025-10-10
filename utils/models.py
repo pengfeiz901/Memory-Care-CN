@@ -26,9 +26,9 @@ class Medication(SQLModel, table=True):
     specific_times: Optional[str] = None
     instructions: Optional[str] = None
     active: bool = True
-    start_date: datetime = Field(default_factory=datetime.utcnow)  # NEW
+    start_date: datetime = Field(default_factory=datetime.now)  # NEW
     end_date: Optional[datetime] = None  # NEW - when to stop
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     
     patient: Patient = Relationship(back_populates="medications")
     logs: List["MedicationLog"] = Relationship(back_populates="medication")
@@ -36,7 +36,7 @@ class Medication(SQLModel, table=True):
 class MedicationLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     medication_id: int = Field(foreign_key="medication.id", index=True)
-    date: datetime = Field(default_factory=datetime.utcnow)
+    date: datetime = Field(default_factory=datetime.now)
     time_taken: Optional[str] = None
     taken: bool = False
 
@@ -52,7 +52,7 @@ class Goal(SQLModel, table=True):
     patient_id: int = Field(foreign_key="patient.id", index=True)
     text: str
     completed: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
 
     patient: Patient = Relationship(back_populates="goals")

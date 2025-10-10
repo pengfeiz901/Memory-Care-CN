@@ -520,7 +520,7 @@ else:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            # === Medication Dashboard === ## MEDICATION CARD UPDATE ISSUE 2 CLAUDE
+        # === Medication Dashboard === ## MEDICATION CARD UPDATE ISSUE 2 CLAUDE
             st.markdown(f"""
             <div style="text-align: center; background: rgba(30, 27, 75, 0.6); padding: 1rem; border-radius: 12px; border: 1px solid rgba(147, 51, 234, 0.3); margin-bottom: 1rem;">
                 <h3 style="color: #a855f7; margin: 0;">📅 {datetime.now().strftime('%A, %B %d, %Y')}</h3>
@@ -537,20 +537,31 @@ else:
 
             try:
                 med_resp = requests.get(f"{API}/patient/medications", params={"token": st.session_state.token})
+                
                 if med_resp.ok:
                     meds = med_resp.json().get("medications", [])
+                    
                     if meds:
                         for m in meds:
                             st.markdown(f"**{m['name']}** — {m['times_per_day']}x per day")
                             st.caption(f"🕒 {m['specific_times'] or 'No specific times'} | {m['instructions'] or ''}")
 
-                            # Get today's logs
-                            taken_today = [l for l in m['logs'] if l['date'] == datetime.now().strftime("%Y-%m-%d")]
-                            remaining = m['times_per_day'] - len(taken_today)
+                            # Get today's logs - FIX: Parse date properly
+                            today_str = datetime.now().strftime("%Y-%m-%d")
+                            taken_today = []
+                            
+                            for log in m['logs']:
+                                # Extract just the date part (YYYY-MM-DD) from the log
+                                log_date = log['date'].split()[0] if ' ' in log['date'] else log['date']
+                                if log_date == today_str and log.get('taken', True):
+                                    taken_today.append(log)
+                            
+                            taken_count = len(taken_today)
+                            remaining = m['times_per_day'] - taken_count
                             
                             # Disable button if all doses taken
-                            button_disabled = len(taken_today) >= m['times_per_day']
-                            button_text = f"✅ Complete ({len(taken_today)}/{m['times_per_day']})" if button_disabled else f"✅ Take {m['name']}"
+                            button_disabled = taken_count >= m['times_per_day']
+                            button_text = f"✅ Complete ({taken_count}/{m['times_per_day']})" if button_disabled else f"✅ Take {m['name']}"
                             
                             if st.button(button_text, key=f"take_{m['name']}", disabled=button_disabled):
                                 log_resp = requests.post(
@@ -564,15 +575,20 @@ else:
                                     st.error(log_resp.json().get("detail", "Error logging medication"))
 
                             # Display progress
-                            st.progress(len(taken_today) / m['times_per_day'])
+                            progress_value = taken_count / m['times_per_day'] if m['times_per_day'] > 0 else 0
+                            st.progress(progress_value)
+                            
                             if button_disabled:
-                                st.caption(f"✅ All doses complete! ({len(taken_today)}/{m['times_per_day']})")
+                                st.caption(f"✅ All doses complete! ({taken_count}/{m['times_per_day']})")
                             else:
-                                st.caption(f"Taken {len(taken_today)}/{m['times_per_day']} times today | {remaining} remaining")
+                                st.caption(f"Taken {taken_count}/{m['times_per_day']} times today | {remaining} remaining")
+                            
+                            st.markdown("---")
                     else:
                         st.info("💊 No medications assigned yet.")
                 else:
-                    st.error("Error fetching medications.")
+                    st.error(f"Error fetching medications: Status {med_resp.status_code}")
+                    
             except Exception as e:
                 st.error(f"Failed to load medications: {e}")
 

@@ -1,6 +1,8 @@
 # Python
 _pycache_/
 *.pyc
+__pycache__/
+
 
 # Virtual envs
 .venv/
@@ -19,3 +21,4 @@ app.db
 Thumbs.db
 .vscode/
 .idea/
+
