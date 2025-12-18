@@ -95,3 +95,34 @@ Traditional chatbots forget everything between sessions. **MemoryCare doesn't.**
 
 ## Special thanks to the MemVerge team for creating MemMachine and hosting this innovative hackathon.
 
+---
+
+## 📚 开发文档
+
+### 📖 详细开发指南
+**零基础用户快速上手指南**：查看 [PROJECT_GUIDE.md](./PROJECT_GUIDE.md)
+
+包含内容：
+- ✅ 项目架构详解（带图表）
+- ✅ 代码结构说明（每个文件的作用）
+- ✅ 核心概念理解（记忆类型、数据流向等）
+- ✅ 如何修改代码的完整教程
+- ✅ 5个常见修改场景的详细示例
+- ✅ 调试技巧和最佳实践
+
+### ⚡ 快速参考
+**常用代码片段速查**：查看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
+
+包含内容：
+- ✅ 文件速查表
+- ✅ 常用代码片段（复制即用）
+- ✅ 常见修改场景速查
+- ✅ 关键位置索引
+- ✅ 调试命令
+
+**适合人群**：
+- 🎯 零基础开发者：从理解项目到上手修改
+- 🔧 有经验的开发者：快速查找代码位置和示例
+- 📝 代码维护者：快速定位和修改功能
+
+---

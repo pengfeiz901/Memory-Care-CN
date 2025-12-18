@@ -1,0 +1,3872 @@
+diff --git a/README.md b/README.md
+index b22493b..7d5475e 100644
+--- a/README.md
++++ b/README.md
+@@ -95,3 +95,34 @@ Traditional chatbots forget everything between sessions. **MemoryCare doesn't.**
+ 
+ ## Special thanks to the MemVerge team for creating MemMachine and hosting this innovative hackathon.
+ 
++---
++
++## 📚 开发文档
++
++### 📖 详细开发指南
++**零基础用户快速上手指南**：查看 [PROJECT_GUIDE.md](./PROJECT_GUIDE.md)
++
++包含内容：
++- ✅ 项目架构详解（带图表）
++- ✅ 代码结构说明（每个文件的作用）
++- ✅ 核心概念理解（记忆类型、数据流向等）
++- ✅ 如何修改代码的完整教程
++- ✅ 5个常见修改场景的详细示例
++- ✅ 调试技巧和最佳实践
++
++### ⚡ 快速参考
++**常用代码片段速查**：查看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
++
++包含内容：
++- ✅ 文件速查表
++- ✅ 常用代码片段（复制即用）
++- ✅ 常见修改场景速查
++- ✅ 关键位置索引
++- ✅ 调试命令
++
++**适合人群**：
++- 🎯 零基础开发者：从理解项目到上手修改
++- 🔧 有经验的开发者：快速查找代码位置和示例
++- 📝 代码维护者：快速定位和修改功能
++
++---
+diff --git a/api/__pycache__/__init__.cpython-313.pyc b/api/__pycache__/__init__.cpython-313.pyc
+index bf54ce6..d09ec2f 100644
+Binary files a/api/__pycache__/__init__.cpython-313.pyc and b/api/__pycache__/__init__.cpython-313.pyc differ
+diff --git a/api/__pycache__/main.cpython-313.pyc b/api/__pycache__/main.cpython-313.pyc
+index 556a380..be89fd5 100644
+Binary files a/api/__pycache__/main.cpython-313.pyc and b/api/__pycache__/main.cpython-313.pyc differ
+diff --git a/api/main.py b/api/main.py
+index baa9dbe..4544314 100644
+--- a/api/main.py
++++ b/api/main.py
+@@ -100,22 +100,45 @@ class RememberRequest(BaseModel):
+ 
+ # HELPER FUNCTION FOR MEDICATION RESET #
+ def check_and_reset_medications(patient_id: int):
+-    """Check medication expiration and reset daily counts"""
++    """
++    检查并重置药物状态
++    
++    此函数会检查患者的所有激活药物，如果药物的结束日期已过，
++    则自动将药物标记为非激活状态。
++    
++    参数:
++        patient_id: 患者数据库 ID（整数）
++        
++    工作流程:
++        1. 获取患者所有激活的药物
++        2. 检查每个药物的结束日期
++        3. 如果结束日期早于今天，将 active 设为 False
++        4. 提交更改到数据库
++    """
++    # 获取数据库会话（使用上下文管理器确保会话正确关闭）
+     with get_session() as s:
++        # 获取今天的日期（不包含时间部分）
+         today = datetime.now().date()
+         
+-        # Get active medications
++        # 步骤 1: 查询患者所有激活的药物
++        # 条件：患者 ID 匹配且药物处于激活状态
+         meds = s.exec(select(Medication).where(
+-            Medication.patient_id == patient_id,
+-            Medication.active == True
+-        )).all()
++            Medication.patient_id == patient_id,  # 匹配患者 ID
++            Medication.active == True  # 只查询激活的药物
++        )).all()  # 获取所有匹配的记录
+         
++        # 步骤 2: 遍历每个药物，检查是否过期
+         for med in meds:
+-            # Check if medication period is over
++            # 检查药物的结束日期
++            # 如果药物有结束日期（end_date 不为 None）且结束日期早于今天
+             if med.end_date and med.end_date.date() < today:
++                # 将药物标记为非激活状态
+                 med.active = False
++                # 将修改后的药物对象添加到会话（标记为需要更新）
+                 s.add(med)
+         
++        # 步骤 3: 提交所有更改到数据库
++        # 这会将所有标记为需要更新的记录写入数据库
+         s.commit()
+ 
+ # FILTER FUNCTION FOR MEMORY EXTRACTION AND ROUTING #
+@@ -171,43 +194,69 @@ def extract_and_route_memories(user_id: str, user_message: str, assistant_reply:
+                 Your extraction:"""
+ 
+     try:
++        # 步骤 1: 调用 LLM 分析对话，提取事实信息
++        # 使用专门的系统提示词，指导 LLM 进行记忆路由分析
+         extraction = chat(
+-            "You are a memory routing specialist.",
+-            [{"role": "user", "content": routing_prompt}]
++            "You are a memory routing specialist.",  # 系统提示词：定义 LLM 角色
++            [{"role": "user", "content": routing_prompt}]  # 用户消息：包含完整的路由提示词
+         )
+         
++        # 步骤 2: 检查 LLM 是否返回 "NO_STORAGE"（表示没有需要存储的信息）
++        # 转换为大写进行比较，避免大小写问题
+         if "NO_STORAGE" in extraction.upper():
+-            return []
++            return []  # 如果没有需要存储的信息，返回空列表
+         
+-        memories_to_store = []
++        # 步骤 3: 解析 LLM 返回的结构化数据
++        memories_to_store = []  # 初始化存储列表
++        # 将 LLM 返回的文本按行分割（每行代表一条记忆）
+         for line in extraction.strip().split("\n"):
++            # 去除每行的首尾空白字符
+             line = line.strip()
++            # 跳过空行或包含 "NO_STORAGE" 的行
+             if not line or "NO_STORAGE" in line:
+                 continue
+             
+-            # Parse STORE_FOR:user|[category]|fact
++            # 步骤 4: 解析格式化的记忆行
++            # 格式：STORE_FOR:user_id|[category]|fact_text
+             if line.startswith("STORE_FOR:"):
+                 try:
++                    # 使用 "|" 作为分隔符，最多分割成 3 部分
++                    # parts[0]: "STORE_FOR:user_id"
++                    # parts[1]: "[category]"
++                    # parts[2]: "fact_text"
+                     parts = line.split("|", 2)
++                    print(f"[DEBUG] line: {line}, parts: {parts}")
++                    
++                    # 提取目标用户 ID：去除 "STORE_FOR:" 前缀并去除空白
+                     target_user = parts[0].replace("STORE_FOR:", "").strip()
++                    # 提取分类：去除方括号并去除空白
+                     category = parts[1].strip().replace("[", "").replace("]", "")
++                    # 提取事实文本：去除空白
+                     fact = parts[2].strip()
+                     
++                    # 步骤 5: 验证事实文本的有效性
++                    # 要求：非空且至少包含 3 个词（确保是有意义的事实）
+                     if fact and len(fact.split()) >= 3:
++                        # 将解析出的记忆添加到列表
++                        print(f"[DEBUG] should_attempt_extraction() - fact: {fact}")
+                         memories_to_store.append({
+-                            "user_id": target_user,
+-                            "text": fact,
+-                            "category": category
++                            "user_id": target_user,  # 目标用户 ID
++                            "text": fact,  # 事实文本（第一人称视角）
++                            "category": category  # 记忆分类
+                         })
+                 except Exception as e:
++                    # 如果解析某行时出错，打印警告但继续处理其他行
+                     print(f"[WARN] Failed to parse line: {line} | {e}")
+-                    continue
++                    continue  # 跳过当前行，继续处理下一行
+         
++        # 步骤 6: 返回所有成功解析的记忆列表
++        print(f"[DEBUG] memories_to_store: {memories_to_store}")
+         return memories_to_store
+         
+     except Exception as e:
++        # 如果整个提取过程出错（如 LLM 调用失败），记录错误并返回空列表
+         print(f"[ERROR] Memory routing failed: {e}")
+-        return []
++        return []  # 返回空列表，不影响主流程
+     
+ 
+ def should_attempt_extraction(message: str) -> bool:
+@@ -222,72 +271,110 @@ def should_attempt_extraction(message: str) -> bool:
+     
+     # 1. Filter out very short messages (unlikely to contain meaningful info)
+     word_count = len(message.split())
+-    if word_count < 3:
+-        return False
++    #if word_count < 3:
++    #    print(f"[DEBUG] should_attempt_extraction() - word_count < 3: {word_count}")
++    #    return False
+     
+     # 2. Filter out questions - these are requests for information, not statements of fact
+     question_words = [
++        # English question words
+         "what", "who", "when", "where", "why", "how",
+         "which", "whose", "whom",
+         "do you", "can you", "could you", "would you", "will you",
+         "should you", "are you", "is there", "did you",
+-        "tell me", "show me", "help me", "explain"
++        "tell me", "show me", "help me", "explain",
++        # Chinese question words (中文疑问词)
++        "什么", "谁", "何时", "哪里", "为什么", "怎么", "怎样",
++        "哪个", "哪些", "谁的",
++        "你能", "你会", "你能告诉我", "你能帮我", "你能", "你会",
++        "告诉我", "给我看", "帮我", "解释一下", "解释",
++        "请问", "问一下", "想知道", "想了解"
+     ]
+     
+     if any(message_lower.startswith(q) for q in question_words):
++        print(f"[DEBUG] question_words return False")
+         return False
+     
+     if message.endswith("?"):
++        print(f"[DEBUG] message.endswith('?') return False")
+         return False
+     
+     # 3. Filter out greetings and social pleasantries
+     greetings = [
++        # English greetings
+         "hello", "hi ", "hi,", "hey", "hey there",
+         "good morning", "good afternoon", "good evening", "good night",
+         "thanks", "thank you", "thank", "thx",
+         "ok", "okay", "sure", "yes", "no", "yeah", "yep", "nope",
+-        "bye", "goodbye", "see you", "talk later"
++        "bye", "goodbye", "see you", "talk later",
++        # Chinese greetings (中文问候语)
++        "你好", "您好", "早上好", "下午好", "晚上好", "晚安",
++        "谢谢", "多谢", "感谢",
++        "好的", "可以", "行", "是的", "不是", "对", "不对",
++        "再见", "拜拜", "回头见", "待会见"
+     ]
+     
+     if any(message_lower.startswith(g) for g in greetings):
++        print(f"[DEBUG] greetings return False")
+         return False
+     
+     # 4. Filter out system/meta requests
+     meta_requests = [
++        # English meta requests
+         "clear", "delete", "reset", "forget",
+-        "remember this", "save this", "store this"  # explicit commands handled differently
++        "remember this", "save this", "store this",  # explicit commands handled differently
++        # Chinese meta requests (中文系统请求)
++        "清除", "删除", "重置", "忘记",
++        "记住这个", "保存这个", "存储这个"
+     ]
+     
+     if any(meta in message_lower for meta in meta_requests):
++        print(f"[DEBUG] meta_requests return False")
+         return False
+     
+     # 5. POSITIVE SIGNALS - Strong indicators of factual information
+     info_indicators = [
+         # Identity and personal info
+         "i am", "i'm", "my name is", "i was born", "i live in",
++        # Chinese: 身份和个人信息
++        "我是", "我叫", "我出生", "我住在", "我来自",
+         
+         # Preferences and opinions
+         "i like", "i love", "i enjoy", "i prefer", "i hate", "i don't like",
+         "my favorite", "i want", "i need",
++        # Chinese: 偏好和观点
++        "我喜欢", "我爱", "我享受", "我更喜欢", "我讨厌", "我不喜欢",
++        "我最喜欢", "我想要", "我需要",
+         
+         # Relationships and family
+         "my ", "my wife", "my husband", "my son", "my daughter",
+         "my brother", "my sister", "my friend", "my mother", "my father",
++        # Chinese: 关系和家庭
++        "我的", "我妻子", "我丈夫", "我儿子", "我女儿",
++        "我兄弟", "我姐妹", "我朋友", "我母亲", "我父亲", "我妈妈", "我爸爸",
+         
+         # Activities and routines
+         "i work", "i go to", "i take", "i eat", "i drink", "i play",
+         "i watch", "i read", "i listen", "i exercise",
+         "every day", "every morning", "every night", "usually",
++        # Chinese: 活动和日常
++        "我工作", "我去", "我吃", "我喝", "我玩", "我看", "我读", "我听", "我锻炼",
++        "每天", "每天早上", "每天晚上", "通常", "经常",
+         
+         # Medical and health (important for dementia care)
+         "i have", "i take medication", "my doctor", "i'm allergic",
++        # Chinese: 医疗和健康
++        "我有", "我吃药", "我服药", "我的医生", "我过敏",
+         
+         # Past experiences and memories
+         "i used to", "i remember", "i grew up", "when i was",
+-        "i worked at", "i went to", "i met"
++        "i worked at", "i went to", "i met",
++        # Chinese: 过去的经历和记忆
++        "我以前", "我记得", "我长大", "当我", "我在", "我去过", "我见过"
+     ]
+     
+     if any(indicator in message_lower for indicator in info_indicators):
++        print(f"[DEBUG] ****** info_indicators return True")
+         return True
+     
+     # 6. Check for proper nouns (names, places) - often indicates factual content
+@@ -296,22 +383,49 @@ def should_attempt_extraction(message: str) -> bool:
+     if len(words) > 1:
+         capitalized_count = sum(1 for word in words[1:] if word and word[0].isupper())
+         if capitalized_count >= 1:  # Has at least one proper noun
++            print(f"proper nouns return True")
+             return True
+     
+     # 7. Default behavior for medium-length declarative statements
+     # If it's 5+ words and doesn't match filters above, might be worth checking
+     if word_count >= 5 and not message.endswith("?"):
++        print(f"[DEBUG] word_count >= 5 and not message.endswith('?') return True")
+         return True
+     
+     # 8. Default: don't extract (be conservative to save API calls)
++    print(f"[DEBUG] default return False")
+     return False
+ 
+ # ============================
+ #        ROUTES
+ # ============================
+ 
++# FASTAPI routes #
+ @app.get("/health")
+ def health() -> Dict[str, Any]:
++    """
++    健康检查端点
++    
++    用于检查 API 服务器和 MemMachine 服务的运行状态。
++    通常用于监控、负载均衡器健康检查或系统诊断。
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - memmachine: MemMachine 服务的健康状态信息
++    
++    异常:
++        HTTPException(500): 如果 MemMachine 服务不可用或发生其他错误
++    
++    示例响应:
++        {
++            "ok": True,
++            "memmachine": {
++                "status": "healthy",
++                ...
++            }
++        }
++    """
+     try:
+         return {"ok": True, "memmachine": mm.health()}
+     except Exception as e:
+@@ -320,6 +434,44 @@ def health() -> Dict[str, Any]:
+ # -------------------- AUTH --------------------
+ @app.post("/auth/doctor/login")
+ def doctor_login(payload: DoctorLogin):
++    """
++    医生登录端点
++    
++    验证医生凭证并颁发认证 Token。目前仅支持硬编码的医生账户。
++    
++    参数:
++        payload (DoctorLogin): 包含以下字段的请求体：
++            - username (str): 医生用户名（当前仅支持 "doctor"）
++            - password (str): 医生密码（当前仅支持 "doctor"）
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - token (str): 认证 Token，用于后续 API 调用的身份验证
++            - role (str): 用户角色，固定为 "doctor"
++    
++    异常:
++        HTTPException(401): 如果用户名或密码不正确
++    
++    注意:
++        - Token 有效期为 8 小时
++        - Token 格式：以 "doc_" 开头的随机字符串
++        - 生产环境应使用更安全的认证机制（如 JWT + 密码哈希）
++    
++    示例请求:
++        POST /auth/doctor/login
++        {
++            "username": "doctor",
++            "password": "doctor"
++        }
++    
++    示例响应:
++        {
++            "ok": True,
++            "token": "doc_abc123...",
++            "role": "doctor"
++        }
++    """
+     token = issue_doctor_token(payload.username, payload.password)
+     if not token:
+         raise HTTPException(401, "Invalid doctor credentials")
+@@ -327,56 +479,132 @@ def doctor_login(payload: DoctorLogin):
+ 
+ @app.post("/auth/patient/signup")
+ def patient_signup(payload: PatientSignup):
++    """
++    患者注册端点
++    
++    创建新患者账户，将信息存储到数据库和 MemMachine。
++    同时创建情景记忆（注册事件）和档案记忆（个人信息）。
++    """
++    # 步骤 1: 检查用户名是否已存在
+     with get_session() as s:
++        # 查询数据库中是否已有相同用户名的患者
+         existing = s.exec(select(Patient).where(Patient.username == payload.username)).first()
++        # 如果用户名已存在，返回 409 冲突错误
+         if existing:
+             raise HTTPException(409, "Username already exists")
++        
++        # 步骤 2: 创建新患者记录
++        # 使用请求数据创建 Patient 对象
+         p = Patient(
+-            username=payload.username,
+-            password=payload.password,
+-            full_name=payload.full_name,
+-            family_info=payload.family_info,
+-            emergency_contact_name=payload.emergency_contact_name,
+-            emergency_contact_phone=payload.emergency_contact_phone,
+-            hobbies=payload.hobbies,
++            username=payload.username,  # 用户名（唯一标识）
++            password=payload.password,  # 密码（注意：生产环境应使用哈希加密）
++            full_name=payload.full_name,  # 全名
++            family_info=payload.family_info,  # 家庭信息（可选）
++            emergency_contact_name=payload.emergency_contact_name,  # 紧急联系人姓名（可选）
++            emergency_contact_phone=payload.emergency_contact_phone,  # 紧急联系人电话（可选）
++            hobbies=payload.hobbies,  # 兴趣爱好（可选）
+         )
++        # 将新患者添加到数据库会话
+         s.add(p)
++        # 提交事务，将数据写入数据库
+         s.commit()
+ 
++    # 步骤 3: 为患者颁发认证 Token
++    # Token 用于后续 API 调用的身份验证
+     token = issue_patient_token(payload.username)
+ 
++    # 步骤 4: 准备记忆数据
++    # 情景记忆：记录注册事件（临时性记忆）
+     episodic_text = (
+         f"{payload.full_name} signed up for MemoryCare on {datetime.now().strftime('%Y-%m-%d')}."
+     )
++    
++    # 档案记忆：存储个人信息（永久性记忆）
++    # 使用 or 运算符提供默认值，确保所有字段都有值
+     profile_data = {
+-        "full_name": payload.full_name,
+-        "family_info": payload.family_info or "Not provided",
+-        "emergency_contact_name": payload.emergency_contact_name or "Not provided",
+-        "emergency_contact_phone": payload.emergency_contact_phone or "Not provided",
+-        "hobbies": payload.hobbies or "Not shared",
+-        "category": "personal_info"
++        "full_name": payload.full_name,  # 全名
++        "family_info": payload.family_info or "Not provided",  # 家庭信息，如果为空则使用默认文本
++        "emergency_contact_name": payload.emergency_contact_name or "Not provided",  # 紧急联系人姓名
++        "emergency_contact_phone": payload.emergency_contact_phone or "Not provided",  # 紧急联系人电话
++        "hobbies": payload.hobbies or "Not shared",  # 兴趣爱好
++        "category": "personal_info"  # 分类标记，用于记忆组织
+     }
++    
++    # 步骤 5: 如果有紧急联系人信息，单独存储一条合并的档案记忆
++    # 这样可以在需要时快速检索紧急联系人信息
+     if payload.emergency_contact_name:
+         profile_data["emergency_contact_name"] = payload.emergency_contact_name
+     if payload.emergency_contact_phone:
+         profile_data["emergency_contact_phone"] = payload.emergency_contact_phone
+-        # Store a combined emergency contact entry in profile memory
++        # 存储合并的紧急联系人信息到档案记忆
++        # 格式："{姓名} - Phone: {电话}"
+         mm.remember_profile(
+-            user_id=payload.username,
+-            key="emergency_contact",
+-            value=f"{payload.emergency_contact_name or 'Unknown'} - Phone: {payload.emergency_contact_phone}",
+-            category="emergency_info"
++            user_id=payload.username,  # 用户 ID
++            key="emergency_contact",  # 记忆键名
++            value=f"{payload.emergency_contact_name or 'Unknown'} - Phone: {payload.emergency_contact_phone}",  # 合并的值
++            category="emergency_info"  # 分类为紧急信息
+         )
++    
++    # 步骤 6: 同时存储情景记忆和档案记忆
++    # store_dual_memory 会同时调用 remember() 和 remember_profile()
+     mm.store_dual_memory(
+-        user_id=payload.username,
+-        episodic_text=episodic_text,
+-        profile_data=profile_data,
+-        tags=["signup", "profile_creation"]
++        user_id=payload.username,  # 用户 ID
++        episodic_text=episodic_text,  # 情景记忆文本
++        profile_data=profile_data,  # 档案记忆数据
++        tags=["signup", "profile_creation"]  # 标签，用于记忆分类和检索
+     )
++    
++    # 步骤 7: 返回成功响应，包含 Token 和角色信息
+     return {"ok": True, "token": token, "role": "patient"}
+ 
+ @app.post("/auth/patient/login")
+ def patient_login(payload: PatientLogin):
++    """
++    患者登录端点
++    
++    验证患者凭证，记录登录事件到记忆系统，并颁发认证 Token。
++    
++    参数:
++        payload (PatientLogin): 包含以下字段的请求体：
++            - username (str): 患者用户名（注册时创建的唯一标识符）
++            - password (str): 患者密码（注意：当前为明文比较，生产环境应使用哈希）
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - token (str): 认证 Token，用于后续 API 调用的身份验证
++            - role (str): 用户角色，固定为 "patient"
++    
++    异常:
++        HTTPException(401): 如果用户名不存在或密码不正确
++    
++    工作流程:
++        1. 从数据库查询患者记录
++        2. 验证用户名和密码
++        3. 将登录事件记录到 MemMachine 情景记忆
++        4. 颁发认证 Token
++        5. 返回 Token 和角色信息
++    
++    注意:
++        - Token 有效期为 8 小时
++        - Token 格式：以 "pat_" 开头的随机字符串
++        - 登录事件会自动存储到记忆系统，用于追踪患者活动
++        - 生产环境应使用密码哈希（如 bcrypt）而不是明文比较
++    
++    示例请求:
++        POST /auth/patient/login
++        {
++            "username": "patient123",
++            "password": "password123"
++        }
++    
++    示例响应:
++        {
++            "ok": True,
++            "token": "pat_xyz789...",
++            "role": "patient"
++        }
++    """
+     with get_session() as s:
+         p = s.exec(select(Patient).where(Patient.username == payload.username)).first()
+         if not p or p.password != payload.password:
+@@ -392,6 +620,56 @@ def patient_login(payload: PatientLogin):
+ # -------------------- DOCTOR ROUTES --------------------
+ @app.get("/doctor/patients")
+ def list_patients(token: str = Query(...)):
++    """
++    获取所有患者列表端点（医生专用）
++    
++    返回系统中所有已注册患者的简要信息列表。
++    仅限医生角色访问，用于医生选择要管理的患者。
++    
++    参数:
++        token (str): 医生认证 Token，通过查询参数传递
++                    格式：Query(...) 表示必填参数
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - patients (List[Dict]): 患者列表，每个患者包含：
++                - username (str): 患者用户名
++                - full_name (str): 患者全名
++                - id (int): 患者数据库 ID
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是医生角色
++    
++    用途:
++        - 医生界面显示患者下拉列表
++        - 医生选择要管理的患者
++        - 患者管理功能
++    
++    注意:
++        - 返回所有患者，不进行分页（如果患者数量很大，应考虑添加分页）
++        - 仅返回基本信息，不包含敏感信息（如密码）
++    
++    示例请求:
++        GET /doctor/patients?token=doc_abc123...
++    
++    示例响应:
++        {
++            "ok": True,
++            "patients": [
++                {
++                    "username": "patient1",
++                    "full_name": "张三",
++                    "id": 1
++                },
++                {
++                    "username": "patient2",
++                    "full_name": "李四",
++                    "id": 2
++                }
++            ]
++        }
++    """
+     info = whoami(token)
+     if not info or info["role"] != "doctor":
+         raise HTTPException(401, "Doctor auth required")
+@@ -401,6 +679,68 @@ def list_patients(token: str = Query(...)):
+ 
+ @app.post("/doctor/medications")
+ def add_med(payload: MedicationIn, token: str = Query(...), duration_days: int = Query(7)):
++    """
++    添加药物端点（医生专用）
++    
++    医生为指定患者添加新的药物处方。系统会：
++    1. 验证医生身份
++    2. 检查患者是否存在
++    3. 检查是否已有同名的激活药物（防止重复）
++    4. 创建药物记录
++    5. 将药物信息存储到记忆系统（情景记忆和档案记忆）
++    
++    参数:
++        payload (MedicationIn): 包含以下字段的请求体：
++            - patient_username (str): 患者用户名
++            - name (str): 药物名称（如 "阿司匹林"）
++            - times_per_day (int): 每天服用次数（如 3 表示每天 3 次）
++            - specific_times (str): 具体服用时间，逗号分隔（如 "09:00,14:00,20:00"）
++            - instructions (str): 服用说明（如 "饭后服用"、"用水送服"）
++            - active (bool): 是否激活（True 表示正在服用）
++        token (str): 医生认证 Token，通过查询参数传递
++        duration_days (int): 药物持续时间（天数），默认 7 天，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - message (str): 成功消息
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是医生角色
++        HTTPException(404): 如果患者不存在
++        HTTPException(400): 如果已存在同名的激活药物
++    
++    工作流程:
++        1. 验证医生身份
++        2. 查询患者记录
++        3. 检查是否已有同名激活药物（防止重复添加）
++        4. 创建 Medication 记录（自动设置 start_date 和 created_at）
++        5. 将药物信息存储到记忆系统：
++           - 情景记忆：记录医生添加药物的事件
++           - 档案记忆：存储药物信息作为永久性医疗记录
++    
++    注意:
++        - 药物名称会自动转换为小写并替换空格为下划线作为档案记忆的键名
++        - 药物信息会永久存储到患者的档案记忆中，供 AI 助手参考
++        - 如果患者已有同名激活药物，会拒绝添加新记录
++    
++    示例请求:
++        POST /doctor/medications?token=doc_abc123...&duration_days=30
++        {
++            "patient_username": "patient1",
++            "name": "阿司匹林",
++            "times_per_day": 3,
++            "specific_times": "09:00,14:00,20:00",
++            "instructions": "饭后服用，用水送服",
++            "active": true
++        }
++    
++    示例响应:
++        {
++            "ok": True,
++            "message": "Medication added"
++        }
++    """
+     info = whoami(token)
+     if not info or info["role"] != "doctor":
+         raise HTTPException(401, "Doctor auth required")
+@@ -445,6 +785,69 @@ def add_med(payload: MedicationIn, token: str = Query(...), duration_days: int =
+ 
+ @app.get("/doctor/patient-goals")
+ def get_patient_goals(patient_username: str = Query(...), token: str = Query(...)):
++    """
++    获取患者目标列表端点（医生专用）
++    
++    返回指定患者的所有目标（包括已完成和未完成的），用于医生查看患者的治疗进度。
++    
++    参数:
++        patient_username (str): 患者用户名，通过查询参数传递
++        token (str): 医生认证 Token，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - goals (List[Dict]): 目标列表，每个目标包含：
++                - id (int): 目标 ID
++                - patient_id (int): 患者 ID
++                - text (str): 目标描述文本
++                - completed (bool): 是否已完成
++                - created_at (datetime): 创建时间
++                - completed_at (datetime): 完成时间（如果已完成）
++                - completed_at_str (str): 完成时间的格式化字符串（用于前端显示）
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是医生角色
++        HTTPException(404): 如果患者不存在
++    
++    用途:
++        - 医生界面显示患者的所有目标
++        - 查看目标完成情况
++        - 评估患者康复进度
++    
++    注意:
++        - 返回所有目标（包括已完成和未完成）
++        - completed_at_str 字段是为了方便前端显示而添加的格式化字符串
++        - 如果目标未完成，completed_at_str 为 None
++    
++    示例请求:
++        GET /doctor/patient-goals?patient_username=patient1&token=doc_abc123...
++    
++    示例响应:
++        {
++            "ok": True,
++            "goals": [
++                {
++                    "id": 1,
++                    "patient_id": 1,
++                    "text": "每天散步 30 分钟",
++                    "completed": false,
++                    "created_at": "2024-01-01T10:00:00",
++                    "completed_at": null,
++                    "completed_at_str": null
++                },
++                {
++                    "id": 2,
++                    "patient_id": 1,
++                    "text": "完成记忆训练",
++                    "completed": true,
++                    "created_at": "2024-01-01T10:00:00",
++                    "completed_at": "2024-01-05T15:30:00",
++                    "completed_at_str": "2024-01-05 15:30"
++                }
++            ]
++        }
++    """
+     info = whoami(token)
+     if not info or info["role"] != "doctor":
+         raise HTTPException(401, "Doctor auth required")
+@@ -460,6 +863,77 @@ def get_patient_goals(patient_username: str = Query(...), token: str = Query(...
+ 
+ @app.get("/doctor/patient-medications")
+ def doctor_view_meds(patient_username: str = Query(...), token: str = Query(...)):
++    """
++    获取患者药物列表及服用历史端点（医生专用）
++    
++    返回指定患者的所有药物信息及其服用历史记录，用于医生监控患者的服药依从性。
++    
++    参数:
++        patient_username (str): 患者用户名，通过查询参数传递
++        token (str): 医生认证 Token，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - medications (List[Dict]): 药物列表，每个药物包含：
++                - name (str): 药物名称
++                - times_per_day (int): 每天服用次数
++                - specific_times (str): 具体服用时间
++                - instructions (str): 服用说明
++                - logs (List[Dict]): 服用历史记录列表，每条记录包含：
++                    - date (str): 日期（格式：YYYY-MM-DD）
++                    - time_taken (str): 实际服用时间（格式：HH:MM）
++                    - taken (bool): 是否已服用
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是医生角色
++        HTTPException(404): 如果患者不存在
++    
++    用途:
++        - 医生查看患者的所有药物（包括已停用的）
++        - 监控患者服药依从性
++        - 分析服药历史数据
++        - 评估治疗效果
++    
++    注意:
++        - 返回所有药物（包括激活和已停用的）
++        - 每条药物都包含完整的服用历史记录
++        - 日期格式化为字符串以便前端显示
++        - 如果药物没有服用记录，logs 为空列表
++    
++    示例请求:
++        GET /doctor/patient-medications?patient_username=patient1&token=doc_abc123...
++    
++    示例响应:
++        {
++            "ok": True,
++            "medications": [
++                {
++                    "name": "阿司匹林",
++                    "times_per_day": 3,
++                    "specific_times": "09:00,14:00,20:00",
++                    "instructions": "饭后服用",
++                    "logs": [
++                        {
++                            "date": "2024-01-10",
++                            "time_taken": "09:15",
++                            "taken": true
++                        },
++                        {
++                            "date": "2024-01-10",
++                            "time_taken": "14:30",
++                            "taken": true
++                        },
++                        {
++                            "date": "2024-01-10",
++                            "time_taken": null,
++                            "taken": false
++                        }
++                    ]
++                }
++            ]
++        }
++    """
+     info = whoami(token)
+     if not info or info["role"] != "doctor":
+         raise HTTPException(401, "Doctor auth required")
+@@ -482,6 +956,56 @@ def doctor_view_meds(patient_username: str = Query(...), token: str = Query(...)
+     
+ @app.post("/doctor/goals")
+ def add_goal(payload: GoalIn, patient_username: str = Query(...), token: str = Query(...)):
++    """
++    添加目标端点（医生专用）
++    
++    医生为指定患者分配新的治疗目标或康复目标。系统会：
++    1. 验证医生身份
++    2. 检查患者是否存在
++    3. 创建目标记录
++    4. 将目标信息存储到记忆系统（情景记忆和档案记忆）
++    
++    参数:
++        payload (GoalIn): 包含以下字段的请求体：
++            - text (str): 目标描述文本（如 "每天散步 30 分钟"、"完成记忆训练"）
++        patient_username (str): 患者用户名，通过查询参数传递
++        token (str): 医生认证 Token，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - message (str): 成功消息
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是医生角色
++        HTTPException(404): 如果患者不存在
++    
++    工作流程:
++        1. 验证医生身份
++        2. 查询患者记录
++        3. 创建 Goal 记录（自动设置 created_at，completed 默认为 False）
++        4. 将目标信息存储到记忆系统：
++           - 情景记忆：记录医生分配目标的事件
++           - 档案记忆：存储目标作为活跃目标（使用时间戳作为键名的一部分）
++    
++    注意:
++        - 新创建的目标默认为未完成状态（completed=False）
++        - 目标会永久存储到患者的档案记忆中
++        - 档案记忆的键名包含时间戳，确保每个目标都有唯一标识
++        - AI 助手可以根据这些目标提供个性化的提醒和鼓励
++    
++    示例请求:
++        POST /doctor/goals?patient_username=patient1&token=doc_abc123...
++        {
++            "text": "每天晚饭后散步 10 分钟"
++        }
++    
++    示例响应:
++        {
++            "ok": True,
++            "message": "Goal assigned"
++        }
++    """
+     info = whoami(token)
+     if not info or info["role"] != "doctor":
+         raise HTTPException(401, "Doctor auth required")
+@@ -516,6 +1040,64 @@ def add_goal(payload: GoalIn, patient_username: str = Query(...), token: str = Q
+ # -------------------- PATIENT ROUTES --------------------
+ @app.get("/patient/goals")
+ def list_goals(token: str = Query(...)):
++    """
++    获取患者目标列表端点（患者专用）
++    
++    返回当前登录患者的所有未完成目标，用于患者界面显示。
++    
++    参数:
++        token (str): 患者认证 Token，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - goals (List[Dict]): 未完成目标列表，每个目标包含：
++                - id (int): 目标 ID
++                - patient_id (int): 患者 ID
++                - text (str): 目标描述文本
++                - completed (bool): 是否已完成（固定为 False，因为只返回未完成的）
++                - created_at (datetime): 创建时间
++                - completed_at (datetime): 完成时间（固定为 None）
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是患者角色
++    
++    用途:
++        - 患者界面显示当前活跃的目标
++        - 患者查看需要完成的任务
++        - 激励患者完成目标
++    
++    注意:
++        - 只返回未完成的目标（completed=False）
++        - 已完成的目标不会显示给患者
++        - 使用 model_dump() 将 SQLModel 对象转换为字典
++    
++    示例请求:
++        GET /patient/goals?token=pat_xyz789...
++    
++    示例响应:
++        {
++            "ok": True,
++            "goals": [
++                {
++                    "id": 1,
++                    "patient_id": 1,
++                    "text": "每天散步 30 分钟",
++                    "completed": false,
++                    "created_at": "2024-01-01T10:00:00",
++                    "completed_at": null
++                },
++                {
++                    "id": 3,
++                    "patient_id": 1,
++                    "text": "完成记忆训练",
++                    "completed": false,
++                    "created_at": "2024-01-05T10:00:00",
++                    "completed_at": null
++                }
++            ]
++        }
++    """
+     me = whoami(token)
+     if not me or me["role"] != "patient":
+         raise HTTPException(401, "Patient auth required")
+@@ -526,6 +1108,78 @@ def list_goals(token: str = Query(...)):
+ 
+ @app.get("/patient/medications")
+ def list_medications(token: str = Query(...)):
++    """
++    获取患者药物列表端点（患者专用）
++    
++    返回当前登录患者的所有激活药物及其服用历史记录。
++    在返回前会自动检查并重置过期的药物状态。
++    
++    参数:
++        token (str): 患者认证 Token，通过查询参数传递
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - medications (List[Dict]): 激活药物列表，每个药物包含：
++                - name (str): 药物名称
++                - times_per_day (int): 每天服用次数
++                - specific_times (str): 具体服用时间
++                - instructions (str): 服用说明
++                - logs (List[Dict]): 服用历史记录列表，每条记录包含：
++                    - date (str): 日期（格式：YYYY-MM-DD）
++                    - time_taken (str): 实际服用时间（格式：HH:MM）
++                    - taken (bool): 是否已服用
++    
++    异常:
++        HTTPException(401): 如果 Token 无效或用户不是患者角色
++    
++    工作流程:
++        1. 验证患者身份
++        2. 查询患者记录
++        3. 检查并重置过期的药物状态（调用 check_and_reset_medications）
++        4. 查询所有激活的药物
++        5. 为每个药物查询服用历史记录
++        6. 返回格式化后的药物列表
++    
++    用途:
++        - 患者界面显示当前需要服用的药物
++        - 显示药物服用进度
++        - 患者查看服药历史
++    
++    注意:
++        - 只返回激活的药物（active=True）
++        - 已停用的药物不会显示
++        - 会自动检查并重置过期的药物（如果 end_date 已过，会设置为 inactive）
++        - 日期格式化为字符串以便前端显示
++    
++    示例请求:
++        GET /patient/medications?token=pat_xyz789...
++    
++    示例响应:
++        {
++            "ok": True,
++            "medications": [
++                {
++                    "name": "阿司匹林",
++                    "times_per_day": 3,
++                    "specific_times": "09:00,14:00,20:00",
++                    "instructions": "饭后服用",
++                    "logs": [
++                        {
++                            "date": "2024-01-10",
++                            "time_taken": "09:15",
++                            "taken": true
++                        },
++                        {
++                            "date": "2024-01-10",
++                            "time_taken": "14:30",
++                            "taken": true
++                        }
++                    ]
++                }
++            ]
++        }
++    """
+     me = whoami(token)
+     if not me or me["role"] != "patient":
+         raise HTTPException(401, "Patient auth required")
+@@ -547,50 +1201,122 @@ def list_medications(token: str = Query(...)):
+ 
+ @app.post("/patient/medications/log")
+ def log_medication(med_name: str = Query(...), token: str = Query(...)):
++    """
++    记录药物服用端点
++    
++    患者标记某个药物已服用，系统会：
++    1. 验证患者身份
++    2. 检查药物是否存在且激活
++    3. 检查今日是否已记录足够次数（防止重复记录）
++    4. 创建服用日志
++    5. 将事件存储到记忆系统
++    """
++    # 步骤 1: 验证患者身份
++    # whoami() 函数根据 Token 返回用户信息
+     me = whoami(token)
++    # 如果 Token 无效或用户不是患者角色，返回 401 未授权错误
+     if not me or me["role"] != "patient":
+         raise HTTPException(401, "Patient auth required")
+     
++    # 步骤 2: 查询患者和药物信息
+     with get_session() as s:
++        # 根据 Token 中的用户名查询患者记录t2
+         patient = s.exec(select(Patient).where(Patient.username == me["username"])).first()
++        # 查询患者指定的激活药物
++        # 条件：患者 ID 匹配、药物名称匹配、药物处于激活状态
+         med = s.exec(select(Medication).where(
+-            Medication.patient_id == patient.id, 
+-            Medication.name == med_name,
+-            Medication.active == True
++            Medication.patient_id == patient.id,  # 匹配患者 ID
++            Medication.name == med_name,  # 匹配药物名称
++            Medication.active == True  # 只查询激活的药物
+         )).first()
+         
++        # 如果药物不存在，返回 404 错误
+         if not med:
+             raise HTTPException(404, "Medication not found")
+         
+-        # Check today's logs
++        # 步骤 3: 检查今天的服用记录
++        # 获取今天的日期（不包含时间）
+         today = datetime.now().date()
++        # 查询今天该药物的所有日志
++        # datetime.combine() 创建今天 00:00:00 的时间点，用于查询今天的所有记录
+         today_logs = s.exec(select(MedicationLog).where(
+-            MedicationLog.medication_id == med.id,
+-            MedicationLog.date >= datetime.combine(today, datetime.min.time())
++            MedicationLog.medication_id == med.id,  # 匹配药物 ID
++            MedicationLog.date >= datetime.combine(today, datetime.min.time())  # 日期 >= 今天 00:00:00
+         )).all()
+         
+-        # Prevent over-logging
++        # 步骤 4: 防止重复记录（防止超过每日服用次数）
++        # 如果今天的日志数量已经达到或超过每日服用次数，拒绝记录
+         if len(today_logs) >= med.times_per_day:
+             raise HTTPException(400, f"Already logged {med.times_per_day} doses today")
+         
++        # 步骤 5: 创建新的服用日志记录
+         log_entry = MedicationLog(
+-            medication_id=med.id, 
+-            taken=True, 
+-            time_taken=datetime.now().strftime("%H:%M")
++            medication_id=med.id,  # 关联的药物 ID
++            taken=True,  # 标记为已服用
++            time_taken=datetime.now().strftime("%H:%M")  # 记录服用时间（格式：HH:MM）
+         )
++        # 将日志添加到数据库会话
+         s.add(log_entry)
++        # 提交事务，将日志写入数据库
+         s.commit()
+     
++    # 步骤 6: 将药物服用事件存储到记忆系统
++    # 这样 AI 可以在对话中提及患者的服药情况
+     mm.remember(
+-        user_id=me["username"],
+-        text=f"Took {med_name} at {datetime.now().strftime('%H:%M')} on {datetime.now().strftime('%Y-%m-%d')}",
+-        tags=["medication_log"]
++        user_id=me["username"],  # 用户 ID
++        text=f"Took {med_name} at {datetime.now().strftime('%H:%M')} on {datetime.now().strftime('%Y-%m-%d')}",  # 记忆文本
++        tags=["medication_log"]  # 标签，用于记忆分类
+     )
++    
++    # 步骤 7: 返回成功响应
+     return {"ok": True, "message": f"Logged {med_name} as taken."}
+ 
+ # -------------------- MEMORY & CHAT --------------------
+ @app.post("/remember")
+ def remember(req: RememberRequest) -> Dict[str, Any]:
++    """
++    手动记忆存储端点
++    
++    允许手动将文本信息存储到 MemMachine 情景记忆中。
++    通常用于存储重要事件、对话摘要或其他需要记住的信息。
++    
++    参数:
++        req (RememberRequest): 包含以下字段的请求体：
++            - user_id (str): 用户 ID（患者用户名）
++            - text (str): 要存储的记忆文本内容
++    
++    返回:
++        Dict[str, Any]: 包含以下字段的字典：
++            - ok (bool): 操作是否成功
++            - saved (bool): 记忆是否成功保存
++    
++    异常:
++        HTTPException(500): 如果 MemMachine 服务不可用或发生其他错误
++    
++    用途:
++        - 手动记录重要事件
++        - 存储对话摘要
++        - 补充记忆信息
++        - 调试和测试记忆系统
++    
++    注意:
++        - 存储的是情景记忆（episodic memory），用于记录事件和对话
++        - 记忆会永久存储，供后续对话检索使用
++        - 建议在存储前对文本进行清理和格式化
++    
++    示例请求:
++        POST /remember
++        {
++            "user_id": "patient1",
++            "text": "患者今天完成了记忆训练游戏，表现很好"
++        }
++    
++    示例响应:
++        {
++            "ok": True,
++            "saved": true
++        }
++    """
+     try:
+         saved = mm.remember(user_id=req.user_id, text=req.text)
+         return {"ok": True, "saved": saved}
+@@ -604,119 +1330,196 @@ def remember(req: RememberRequest) -> Dict[str, Any]:
+ # -------------------- chat with persistent memory --------------------
+ @app.post("/chat")
+ def chat_with_memory(req: ChatRequest):
++    """
++    带持久化记忆的聊天端点（核心功能）
++    
++    这是应用的核心功能，提供基于 MemMachine 持久化记忆的智能对话。
++    完整工作流程：
++    1. 检索用户的历史记忆（情景记忆和档案记忆）
++    2. 获取患者信息（药物、目标等）
++    3. 构建个性化提示词
++    4. 调用 OpenAI 生成 AI 回复
++    5. 自动提取和存储新的事实信息
++    6. 检测目标完成情况
++    7. 提取档案信息
++    8. 记录情感检查
++    """
++    # 从请求中提取用户 ID（用户名）
+     user_id = req.user_id
+     
+-    # Check if this is system-initiated conversation
++    # 检查是否是系统发起的对话（首次问候）
++    # "__SYSTEM_START__" 是特殊消息，用于触发初始问候
+     is_system_start = req.message == "__SYSTEM_START__"
+     
+-    # Get message count and medication tracking from request
++    # 从请求中获取消息计数（用于追踪对话进度，未来功能扩展）
+     message_count = req.dict().get("message_count", 0)
++    # 从请求中获取药物服用追踪信息（用于未来功能扩展）
+     medication_taken = req.dict().get("medication_taken", {})
+ 
+-    # Retrieve EPISODIC memories
++    # 步骤 1: 检索情景记忆（临时性的事件和对话记录）
++    # 如果不是系统启动，使用用户消息作为查询关键词进行语义搜索
++    # 如果是系统启动，检索所有记忆
++    # top_k=12 表示最多返回 12 条最相关的记忆
+     episodic_memories = mm.retrieve(user_id=user_id, query=req.message if not is_system_start else "all memories", top_k=12)
++
++    # 如果第一次检索没有结果，使用通用查询再次尝试，并增加返回数量
+     if not episodic_memories:
+         episodic_memories = mm.retrieve(user_id=user_id, query="all memories", top_k=20)
+     
+-    # Retrieve PROFILE memories
++    # 步骤 2: 检索档案记忆（永久性的用户信息，如偏好、家庭成员等）
+     profile_memories = mm.retrieve_profile(user_id=user_id)
+-    
+-    print(f"[DEBUG] Episodic memories count: {len(episodic_memories)}")
+-    print(f"[DEBUG] Profile memories count: {len(profile_memories)}")
+ 
++    # 调试输出：打印检索到的记忆数量，便于排查问题
++    print(f"[DEBUG] Episodic memories for user_id: {user_id}, message: {req.message}, is_system_start: {is_system_start}, count: {len(episodic_memories)}")
++    print(f"[DEBUG] Profile memories for user_id: {user_id}, count: {len(profile_memories)}")
++
++    # 步骤 3: 从数据库获取患者信息和相关数据
++    print(f"[DEBUG] Getting patient information and related data for user_id: {user_id}")
+     with get_session() as s:
++        # 查询患者记录：根据用户名查找患者
+         patient = s.exec(select(Patient).where(Patient.username == user_id)).first()
++        # 如果患者存在，检查并重置过期的药物状态
+         if patient:
+             check_and_reset_medications(patient.id)
+ 
++        # 查询患者的所有激活药物：只获取 active=True 的药物
++        # 如果患者不存在，返回空列表
+         meds = s.exec(select(Medication).where(Medication.patient_id == patient.id, Medication.active == True)).all() if patient else []
++        # 查询患者的所有未完成目标：只获取 completed=False 的目标
++        # 如果患者不存在，返回空列表
+         goals = s.exec(select(Goal).where(Goal.patient_id == patient.id, Goal.completed == False)).all() if patient else []
+ 
+-    med_status_lines = []
+-    for m in meds:
++    # 步骤 4: 计算每个药物的今日服用状态
++    print(f"[DEBUG] Calculating medication status for user_id: {user_id}")
++    med_status_lines = []  # 存储每个药物的状态文本
++    for m in meds:  # 遍历每个激活的药物
++        # 获取今天的日期字符串，格式为 YYYY-MM-DD
+         today_str = datetime.now().strftime("%Y-%m-%d")
++        # 查询今天该药物的所有服用日志
++        # datetime.combine() 用于创建今天 00:00:00 的时间点，用于查询今天的所有记录
+         logs = s.exec(select(MedicationLog).where(
+-            MedicationLog.medication_id == m.id,
+-            MedicationLog.date >= datetime.combine(datetime.now().date(), datetime.min.time())
++            MedicationLog.medication_id == m.id,  # 匹配药物 ID
++            MedicationLog.date >= datetime.combine(datetime.now().date(), datetime.min.time())  # 日期 >= 今天 00:00:00
+         )).all()
+         
++        # 统计今天已服用的次数（日志数量）
+         taken_count = len(logs)
++        # 计算今天还需要服用的次数
+         remaining = m.times_per_day - taken_count
+         
++        # 根据剩余次数生成状态文本
+         if remaining > 0:
++            # 还有未服用的剂量，显示警告图标和剩余次数
+             med_status_lines.append(f"⚠️ {m.name}: {taken_count}/{m.times_per_day} taken, {remaining} remaining today")
+         else:
++            # 所有剂量都已完成，显示完成图标
+             med_status_lines.append(f"✅ {m.name}: All doses complete ({m.times_per_day}/{m.times_per_day})")
+ 
++    # 将所有药物的状态文本合并成一行，用换行符分隔
++    # 如果没有药物，显示 "No active medications"
+     medication_status = "\n".join(med_status_lines) if med_status_lines else "No active medications"
+ 
+ 
+-    # Process EPISODIC memories
+-    episodic_lines = []
+-    for r in episodic_memories:
++    # 步骤 5: 处理情景记忆，提取文本内容
++    episodic_lines = []  # 存储提取出的记忆文本
++    for r in episodic_memories:  # 遍历每条检索到的记忆
++        # 记忆可能是字典格式（包含多个字段）或字符串格式
+         if isinstance(r, dict):
++            # 从字典中提取内容，尝试多个可能的键名（兼容不同的响应格式）
++            # 按优先级尝试：content -> episode_content -> text
+             content = r.get("content") or r.get("episode_content") or r.get("text", "")
++            # 如果提取到内容，添加到列表
+             if content:
+                 episodic_lines.append(content)
+         elif isinstance(r, str):
++            # 如果记忆本身就是字符串，直接添加
+             episodic_lines.append(r)
+-    episodic_snippets = "\n".join(f"- {m}" for m in episodic_lines if m).strip() or "No recent memories."
++    # 将所有记忆文本格式化：每行前面加 "- "，用换行符连接
++    # strip() 去除首尾空白，如果没有记忆则显示 "No recent memories."
++    episodic_snippets = "\n" + "\n".join(f"- {m}" for m in episodic_lines if m).strip() if episodic_lines else "No recent memories."
++    print(f"[DEBUG] episodic_snippets: {episodic_snippets}")
+     
+-    # Process PROFILE memories
+-    profile_lines = []
+-    for p in profile_memories:
++    # 步骤 6: 处理档案记忆，提取永久性用户信息
++    profile_lines = []  # 存储档案信息文本
++    for p in profile_memories:  # 遍历每条档案记忆
+         if isinstance(p, dict):
++            # 从字典中提取内容，尝试多个可能的键名
+             content = p.get("episode_content", "") or p.get("content", "") or p.get("text", "")
+             if content:
+                 profile_lines.append(content)
+-    
+-    # Add database profile info as backup
++    print(f"[DEBUG] profile_lines: {profile_lines}")
++
++    # 步骤 7: 从数据库补充档案信息（作为备份，确保信息完整）
++    # 即使 MemMachine 中没有档案记忆，也能从数据库获取基本信息
+     if patient:
++        # 添加家庭信息
+         if patient.family_info:
+             profile_lines.append(f"Family: {patient.family_info}")
++        # 添加兴趣爱好
+         if patient.hobbies:
+             profile_lines.append(f"Hobbies: {patient.hobbies}")
++        # 添加紧急联系人信息
+         if patient.emergency_contact_name:
++            # 先创建基本联系人信息
+             emergency_info = (f"Emergency Contact: {patient.emergency_contact_name}")
++            # 如果有电话，追加电话信息
+             if patient.emergency_contact_phone:
+                 emergency_info += f" - Phone: {patient.emergency_contact_phone}"
+             profile_lines.append(emergency_info)
++    print(f"[DEBUG] profile_lines_with_db: {profile_lines}")
+     
++    # 将所有档案信息格式化：每行前面加 "- "，用换行符连接
++    # 如果没有档案信息，显示 "No profile information."
+     profile_snippets = "\n".join(f"- {p}" for p in profile_lines if p).strip() or "No profile information."
+     
+     print(f"[DEBUG] Profile snippets:\n{profile_snippets}")
+ 
++    # 步骤 8: 准备其他上下文信息
++    # 获取兴趣爱好，如果患者不存在或没有设置，使用默认文本
+     hobbies = patient.hobbies if patient and patient.hobbies else "No hobbies listed"
++    print(f"[DEBUG] hobbies: {hobbies}")
++    # 将所有目标文本用逗号连接，如果没有目标则显示 "None right now."
+     goals_line = ", ".join([g.text for g in goals]) if goals else "None right now."
+-
+-    # Prepare medication info
+-    now = datetime.now()
+-    due_lines = []
+-    for m in meds:
++    print(f"[DEBUG] goals_line: {goals_line}")
++    
++    # 步骤 9: 准备药物提醒信息（检查是否有药物即将到期）
++    print(f"[DEBUG] Preparing medication reminder information for user_id: {user_id}")
++    now = datetime.now()  # 获取当前时间
++    due_lines = []  # 存储即将到期的药物提醒
++    for m in meds:  # 遍历每个药物
++        # 调用调度器函数，检查当前是否在服药时间窗口内（±5分钟）
+         msg = next_due_window(now, m.times_per_day, m.specific_times)
+-        if msg:
++        if msg:  # 如果在时间窗口内，msg 不为空
++            # 添加药物名称、提醒消息和服用说明
+             due_lines.append(f"{m.name}: {msg} {m.instructions or ''}")
+ 
+-    emergency_contact = ""
+-    if patient:
++    # 步骤 10: 准备紧急联系人信息（用于 AI 上下文）
++    print(f"[DEBUG] Preparing emergency contact information for user_id: {user_id}")
++    emergency_contact = ""  # 初始化为空字符串
++    if patient:  # 如果患者存在
++        # 如果同时有姓名和电话，创建完整信息
+         if patient.emergency_contact_name and patient.emergency_contact_phone:
+             emergency_contact = f"Emergency Contact: {patient.emergency_contact_name} - Phone: {patient.emergency_contact_phone}"
++        # 如果只有姓名，只显示姓名
+         elif patient.emergency_contact_name:
+             emergency_contact = f"Emergency Contact: {patient.emergency_contact_name}" 
+ 
+-    # Create system prompt based on context
++    # 步骤 11: 根据对话类型创建系统提示词和用户上下文
+     if is_system_start:
++        # 如果是系统启动（首次问候），使用简化的提示词
+         system = (
+             "You are MemoryCare, a compassionate AI companion. This is the FIRST message - greet the user warmly! "
+             "Welcome them by name, ask how they're feeling today, and mention you're here to support them. "
+             "Be friendly, warm, and conversational. Start the conversation naturally."
+         )
++        # 用户负载：只包含基本信息，用于生成欢迎消息
+         user_payload = (
+             f"Start a warm, welcoming conversation with {patient.full_name if patient else user_id}. "
+             f"Their hobbies include: {hobbies}. "
+             f"Greet them warmly and ask how they're doing today."
+         )
+     else:
++        # 如果是正常对话，使用完整的提示词
+         system = (
+             "You are MemoryCare, a compassionate companion for dementia or Alzheimer's patients. "
+             "Talk like a warm, caring friend. Use the profile information provided to give personalized responses. "
+@@ -725,43 +1528,57 @@ def chat_with_memory(req: ChatRequest):
+             "Encourage them kindly, and celebrate when they share progress."
+         )
+         
+-
++        # 用户负载：包含完整的上下文信息
+         user_payload = (
+-            f"User said: {req.message}\n\n"
+-            f"=== MEDICATION STATUS TODAY ===\n{medication_status}\n\n"
+-            f"=== PROFILE INFORMATION (Use this to answer questions) ===\n{profile_snippets}\n\n"
+-            f"=== RECENT MEMORIES ===\n{episodic_snippets}\n\n"
+-            f"Additional Info:\n"
+-            f"- Full Name: {patient.full_name if patient else 'Unknown'}\n"
+-            f"- Hobbies: {hobbies}\n"
+-            f"- Goals: {goals_line}\n"
+-            f"- Medications: {', '.join([m.name for m in meds]) if meds else 'None'}\n"
+-            f"- {emergency_contact if emergency_contact else 'Emergency Contact: Not provided'}\n"
++            f"User said: {req.message}\n\n"  # 用户的实际消息
++            f"=== MEDICATION STATUS TODAY ===\n{medication_status}\n\n"  # 今日药物状态
++            f"=== PROFILE INFORMATION (Use this to answer questions) ===\n{profile_snippets}\n\n"  # 档案信息
++            f"=== RECENT MEMORIES ===\n{episodic_snippets}\n\n"  # 最近记忆
++            f"Additional Info:\n"  # 其他补充信息
++            f"- Full Name: {patient.full_name if patient else 'Unknown'}\n"  # 全名
++            f"- Hobbies: {hobbies}\n"  # 兴趣爱好
++            f"- Goals: {goals_line}\n"  # 当前目标
++            f"- Medications: {', '.join([m.name for m in meds]) if meds else 'None'}\n"  # 药物列表
++            f"- {emergency_contact if emergency_contact else 'Emergency Contact: Not provided'}\n"  # 紧急联系人
+         )
++        print(f"[DEBUG] user_payload before chat(): {user_payload}")
+ 
++    # 步骤 12: 调用 OpenAI API 生成 AI 回复
++    # system: 系统提示词，定义 AI 的角色和行为
++    # [{"role": "user", "content": user_payload}]: 用户消息列表
+     reply = chat(system, [{"role": "user", "content": user_payload}])
+ 
+-    # ------------------------------------------
+-    # 💾 1. Run factual memory extraction + routing
+-    # ------------------------------------------
++    # ==========================================
++    # 步骤 13: 记忆提取和存储（后处理）
++    # ==========================================
++    
++    # 子步骤 13.1: 提取事实信息并存储到记忆系统
+     try:
++        # 首先判断消息是否可能包含值得存储的事实信息
++        # 这个判断可以避免对明显的问题或问候语进行昂贵的 LLM 调用
+         if should_attempt_extraction(req.message):
++            # 调用 LLM 分析对话，提取事实信息并确定存储路由
++            # 返回格式: [{"user_id": "...", "text": "...", "category": "..."}, ...]
+             routed_memories = extract_and_route_memories(
+-                user_id=user_id,
+-                user_message=req.message,
+-                assistant_reply=reply
++                user_id=user_id,  # 当前用户 ID
++                user_message=req.message,  # 用户消息
++                assistant_reply=reply  # AI 回复（用于上下文分析）
+             )
+ 
++            # 遍历提取出的每条记忆，存储到 MemMachine
+             for mem in routed_memories:
+                 mm.remember(
+-                    user_id=mem["user_id"],
+-                    text=mem["text"],
+-                    tags=[mem["category"]]
++                    user_id=mem["user_id"],  # 目标用户 ID（通常是当前用户）
++                    text=mem["text"],  # 记忆文本（第一人称视角）
++                    tags=[mem["category"]]  # 记忆分类标签
+                 )
++            # 调试输出：显示存储了多少条记忆
+             print(f"[DEBUG] Stored {len(routed_memories)} extracted memories.")
+         else:
++            # 如果消息不包含值得存储的信息，跳过提取步骤
+             print("[DEBUG] Skipped extraction (message not factual enough).")
+     except Exception as e:
++        # 如果提取过程出错，记录错误但不中断对话流程
+         print(f"[ERROR] Memory extraction failed: {e}")
+     # Goal completion detection (same as before)
+ 
+@@ -808,46 +1625,60 @@ def chat_with_memory(req: ChatRequest):
+         except Exception as e:
+             print("Goal check failed:", e)
+ 
+-    # Extract profile information (only for user messages, not system start)
++    # 子步骤 13.3: 提取档案信息（永久性事实，如偏好、关系等）
++    # 只在正常对话时进行，系统启动时不需要
+     if not is_system_start:
++        # 构建档案信息提取的提示词
+         profile_extraction_prompt = (
+             "Extract any NEW permanent facts about the user from this conversation. "
+             "Look for: preferences, likes/dislikes, relationships, routines, medical info. "
+             "Return ONLY a JSON object with keys as fact names and values as facts. "
+             "If no new profile facts, return empty object {}.\n\n"
+-            f"User: {req.message}\nAssistant: {reply}"
++            f"User: {req.message}\nAssistant: {reply}"  # 提供对话上下文
+         )
+         try:
++            # 调用 LLM 提取档案信息
+             profile_result = chat("You extract profile facts and return only JSON.", [{"role": "user", "content": profile_extraction_prompt}])
++            # 初始化档案事实字典
+             new_profile_facts = {}
+             try:
++                # 尝试解析 JSON 格式的结果
+                 new_profile_facts = json.loads(profile_result)
+             except Exception:
++                # 如果解析失败，保持空字典
+                 pass
+             
++            # 如果有提取到新的档案事实
+             if new_profile_facts:
++                # 遍历每个事实，存储到档案记忆
+                 for key, value in new_profile_facts.items():
++                    # 只存储非空字符串值
+                     if value and isinstance(value, str):
+                         mm.remember_profile(
+-                            user_id=user_id,
+-                            key=key,
+-                            value=value,
+-                            category="learned_preferences"
++                            user_id=user_id,  # 用户 ID
++                            key=key,  # 事实键名（如 "favorite_food"）
++                            value=value,  # 事实值（如 "pizza"）
++                            category="learned_preferences"  # 分类为学习到的偏好
+                         )
+         except Exception as e:
++            # 如果提取过程出错，记录错误但不中断对话
+             print("Profile extraction failed:", e)
+-        # Emotional check-in
++        
++        # 子步骤 13.4: 情感检查（检测用户是否表达了情感状态）
++        # 检查用户消息中是否包含情感相关关键词
+         if any(word in req.message.lower() for word in ["feeling", "today", "tired", "happy", "sad", "enjoyed", "worried", "anxious"]):
++            # 如果包含情感关键词，将整个消息作为情感检查记录存储
+             mm.remember(
+                 user_id=user_id,
+                 text=f"Emotional check-in on {datetime.now().strftime('%Y-%m-%d')}: {req.message}",
+-                tags=["emotional", "wellbeing"]
++                tags=["emotional", "wellbeing"]  # 标记为情感和健康相关
+             )
+ 
++    # 步骤 14: 返回响应给前端
+     return {
+-        "ok": True,
+-        "reply": reply,
+-        "episodic_memories_used": len(episodic_lines),
+-        "profile_facts_available": len(profile_lines),
+-        "goals": [g.text for g in goals],
++        "ok": True,  # 操作成功标志
++        "reply": reply,  # AI 生成的回复文本
++        "episodic_memories_used": len(episodic_lines),  # 使用的情景记忆数量（用于调试）
++        "profile_facts_available": len(profile_lines),  # 可用的档案事实数量（用于调试）
++        "goals": [g.text for g in goals],  # 当前活跃的目标列表（前端可能用于显示）
+     }
+\ No newline at end of file
+diff --git a/app.db b/app.db
+index 2f4ec0b..c369331 100644
+Binary files a/app.db and b/app.db differ
+diff --git a/ui/streamlit_app.py b/ui/streamlit_app.py
+index 68a0430..c1863cc 100644
+--- a/ui/streamlit_app.py
++++ b/ui/streamlit_app.py
+@@ -1,16 +1,55 @@
+ # memorycare_app/ui/streamlit_app.py
++"""
++MemoryCare Streamlit 前端应用
++
++本文件是 MemoryCare 应用的前端界面，使用 Streamlit 框架构建。
++提供以下功能：
++1. 用户认证界面（患者注册/登录、医生登录）
++2. 患者界面（聊天、药物管理、目标查看）
++3. 医生界面（患者管理、药物分配、目标分配、进度监控）
++
++技术栈：
++- Streamlit: Web 应用框架
++- Requests: HTTP 客户端（与后端 API 通信）
++"""
++
+ import requests
+ import streamlit as st
+ from datetime import datetime
+ 
+-API = "http://127.0.0.1:8000"
++# 后端 API 服务器地址
++# 注意：如果后端运行在不同端口，需要修改此地址
++API = "http://127.0.0.1:8001"
++
++# 中文日期格式化函数
++def format_chinese_date(dt: datetime) -> str:
++    """
++    将日期时间格式化为中文格式
++    
++    参数:
++        dt: datetime 对象
++        
++    返回:
++        str: 中文格式的日期字符串，如 "2024年1月1日 星期一"
++    """
++    # 中文星期映射
++    weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
++    # 中文月份映射
++    months = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二"]
++    
++    weekday = weekdays[dt.weekday()]
++    month = months[dt.month]
++    day = dt.day
++    year = dt.year
++    
++    return f"{year}年{month}月{day}日 {weekday}"
+ 
+-# Page Configuration
++# 页面配置：设置应用的基本外观和行为
+ st.set_page_config(
+-    page_title="MemoryCare - AI Companion",
+-    page_icon="💙",
+-    layout="wide",
+-    initial_sidebar_state="collapsed"
++    page_title="MemoryCare - AI 护理助手",  # 浏览器标签页标题
++    page_icon="💙",  # 页面图标（emoji）
++    layout="wide",  # 宽屏布局，充分利用屏幕空间
++    initial_sidebar_state="collapsed"  # 初始状态：侧边栏折叠
+ )
+ 
+ # Custom CSS for Dark Theme
+@@ -109,8 +148,8 @@ st.markdown("""
+         border: 2px solid rgba(147, 51, 234, 0.3);
+         border-radius: 12px;
+         padding: 0.75rem 1rem;
+-        font-size: 1rem;
+-        color: #f1f5f9;
++        font-size: 0.8rem;
++        color: #f1f5f9 !important;
+         transition: all 0.3s ease;
+     }
+     .stTextInput>div>div>input:focus,
+@@ -128,6 +167,10 @@ st.markdown("""
+         color: #cbd5e1 !important;
+         font-weight: 600;
+     }
++    ul[data-testid="stSelectboxVirtualDropdown"] {
++        background-color: #222 !important;
++        color: #ffffff !important;
++    }
+     .goal-item {
+         background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+         padding: 1rem 1.5rem;
+@@ -252,41 +295,66 @@ st.markdown("""
+ </style>
+ """, unsafe_allow_html=True)
+ 
+-# Initialize session state
++# ============================
++#        会话状态初始化
++# ============================
++# Streamlit 使用 session_state 在页面重新加载之间保持状态
++# 这些变量用于跟踪用户登录状态、对话历史等
++
++# 用户角色：None（未登录）、"patient"（患者）、"doctor"（医生）
+ if "role" not in st.session_state:
+     st.session_state.role = None
++
++# 认证 Token：用于 API 调用的身份验证
+ if "token" not in st.session_state:
+     st.session_state.token = None
++
++# 患者用户名：当前登录的患者用户名（医生界面也用于选择管理的患者）
+ if "patient_username" not in st.session_state:
+     st.session_state.patient_username = None
++
++# 聊天日志：存储对话历史，格式为 [("You", "消息"), ("MemoryCare", "回复"), ...]
+ if "chat_log" not in st.session_state:
+     st.session_state.chat_log = []
++
++# 目标列表：患者当前的治疗目标
+ if "goals" not in st.session_state:
+     st.session_state.goals = []
++
++# 当前页面：用于导航控制
++# 可能的值："role_select"（角色选择）、"login"（登录）、"signup"（注册）、"doctor_login"（医生登录）
+ if "page" not in st.session_state:
+     st.session_state.page = "role_select"
++
++# 用户类型：在角色选择时使用，区分患者和医生流程
+ if "user_type" not in st.session_state:
+     st.session_state.user_type = None
++
++# 对话是否已开始：标记是否已发送初始问候消息
+ if "conversation_started" not in st.session_state:
+     st.session_state.conversation_started = False
++
++# 消息计数：追踪对话中的消息数量（用于未来功能扩展）
+ if "message_count" not in st.session_state:
+     st.session_state.message_count = 0
++
++# 药物服用追踪：记录药物服用情况（用于未来功能扩展）
+ if "medication_taken" not in st.session_state:
+     st.session_state.medication_taken = {}
+ 
+-# Header
++# 页面头部
+ st.markdown("""
+ <div class="main-header">
+     <h1 class="header-title">💙 MemoryCare</h1>
+-    <p class="header-subtitle">Your Compassionate AI Companion for Dementia & Alzheimer's Care</p>
++    <p class="header-subtitle">您的贴心 AI 护理助手，专为痴呆症和阿尔茨海默病护理而设计</p>
+ </div>
+ """, unsafe_allow_html=True)
+ 
+-# Logout button
++# 登出按钮
+ if st.session_state.role:
+     col1, col2, col3 = st.columns([6, 1, 1])
+     with col3:
+-        if st.button("🚪 Logout", key="logout_btn"):
++        if st.button("🚪 退出登录", key="logout_btn"):
+             st.session_state.role = None
+             st.session_state.token = None
+             st.session_state.patient_username = None
+@@ -299,7 +367,8 @@ if st.session_state.role:
+             st.session_state.medication_taken = {}
+             st.rerun()
+ 
+-# ==================== AUTH PAGES ====================
++# ==================== 认证页面 ====================
++# 如果用户未登录（role 为 None），显示认证相关页面
+ if not st.session_state.role:
+     if st.session_state.page == "role_select":
+         col1, col2, col3 = st.columns([1, 2, 1])
+@@ -307,8 +376,8 @@ if not st.session_state.role:
+             st.markdown("""
+             <div class="welcome-card">
+                 <div class="welcome-icon">💙</div>
+-                <h2 class="welcome-title">Welcome to MemoryCare</h2>
+-                <p class="welcome-subtitle">Please select your role to continue</p>
++                <h2 class="welcome-title">欢迎使用 MemoryCare</h2>
++                <p class="welcome-subtitle">请选择您的身份以继续</p>
+             </div>
+             """, unsafe_allow_html=True)
+             
+@@ -316,31 +385,31 @@ if not st.session_state.role:
+             col_patient, col_doctor = st.columns(2)
+             
+             with col_patient:
+-                if st.button("👤 I'm a Patient", use_container_width=True, key="patient_role"):
++                if st.button("👤 我是患者", use_container_width=True, key="patient_role"):
+                     st.session_state.user_type = "patient"
+                     st.session_state.page = "login"
+                     st.rerun()
+                 st.markdown("""
+                 <div style="text-align: center; padding: 1rem; background: rgba(30, 27, 75, 0.6); border-radius: 12px; border: 1px solid rgba(147, 51, 234, 0.3); margin-top: 1rem;">
+-                    <p style="color: #cbd5e1; margin: 0;">Access your personalized care, chat with AI, and track your goals</p>
++                    <p style="color: #cbd5e1; margin: 0;">访问您的个性化护理，与 AI 聊天，追踪您的目标</p>
+                 </div>
+                 """, unsafe_allow_html=True)
+             
+             with col_doctor:
+-                if st.button("👨‍⚕️ I'm a Doctor", use_container_width=True, key="doctor_role"):
++                if st.button("👨‍⚕️ 我是医生", use_container_width=True, key="doctor_role"):
+                     st.session_state.user_type = "doctor"
+                     st.session_state.page = "doctor_login"
+                     st.rerun()
+                 st.markdown("""
+                 <div style="text-align: center; padding: 1rem; background: rgba(30, 27, 75, 0.6); border-radius: 12px; border: 1px solid rgba(147, 51, 234, 0.3); margin-top: 1rem;">
+-                    <p style="color: #cbd5e1; margin: 0;">Manage patients, assign goals, and monitor medications</p>
++                    <p style="color: #cbd5e1; margin: 0;">管理患者，分配目标，监控药物</p>
+                 </div>
+                 """, unsafe_allow_html=True)
+     
+     elif st.session_state.page == "login":
+         col1, col2, col3 = st.columns([1, 2, 1])
+         with col2:
+-            if st.button("⬅️ Back to Role Selection", key="back_to_role"):
++            if st.button("⬅️ 返回角色选择", key="back_to_role"):
+                 st.session_state.page = "role_select"
+                 st.session_state.user_type = None
+                 st.rerun()
+@@ -348,41 +417,51 @@ if not st.session_state.role:
+             st.markdown("""
+             <div class="welcome-card">
+                 <div class="welcome-icon">👤</div>
+-                <h2 class="welcome-title">Patient Login</h2>
+-                <p class="welcome-subtitle">Welcome back! Sign in to continue</p>
++                <h2 class="welcome-title">患者登录</h2>
++                <p class="welcome-subtitle">欢迎回来！请登录以继续</p>
+             </div>
+             """, unsafe_allow_html=True)
+             
+             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+-            login_user = st.text_input("Username", key="login_user", placeholder="Enter your username")
+-            login_pass = st.text_input("Password", type="password", key="login_pass", placeholder="Enter your password")
++            login_user = st.text_input("用户名", key="login_user", placeholder="请输入您的用户名")
++            login_pass = st.text_input("密码", type="password", key="login_pass", placeholder="请输入您的密码")
+             
+-            if st.button("🔓 Sign In", use_container_width=True):
+-                r = requests.post(f"{API}/auth/patient/login", json={"username": login_user, "password": login_pass})
+-                if r.ok:
+-                    j = r.json()
+-                    st.session_state.role = j["role"]
+-                    st.session_state.token = j["token"]
+-                    st.session_state.patient_username = login_user
+-                    g_resp = requests.get(f"{API}/patient/goals", params={"token": j["token"]})
+-                    if g_resp.ok:
+-                        st.session_state.goals = g_resp.json().get("goals", [])
+-                    st.success("✅ Logged in successfully!")
+-                    st.rerun()
+-                else:
+-                    st.error("❌ Invalid credentials. Please try again.")
++            if st.button("🔓 登录", use_container_width=True):
++                try:
++                    r = requests.post(f"{API}/auth/patient/login", json={"username": login_user, "password": login_pass}, timeout=5)
++                    if r.ok:
++                        j = r.json()
++                        st.session_state.role = j["role"]
++                        st.session_state.token = j["token"]
++                        st.session_state.patient_username = login_user
++                        try:
++                            g_resp = requests.get(f"{API}/patient/goals", params={"token": j["token"]}, timeout=5)
++                            if g_resp.ok:
++                                st.session_state.goals = g_resp.json().get("goals", [])
++                        except:
++                            pass  # 如果获取目标失败，不影响登录
++                        st.success("✅ 登录成功！")
++                        st.rerun()
++                    else:
++                        st.error("❌ 用户名或密码错误，请重试。")
++                except requests.exceptions.ConnectionError:
++                    st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行（运行：uvicorn api.main:app --reload）")
++                except requests.exceptions.Timeout:
++                    st.error("❌ 请求超时，请稍后重试")
++                except Exception as e:
++                    st.error(f"❌ 发生错误：{str(e)}")
+             
+             st.markdown("</div>", unsafe_allow_html=True)
+             st.markdown("---")
+-            st.markdown("<h3 style='color: #f1f5f9; text-align: center;'>Don't have an account?</h3>", unsafe_allow_html=True)
+-            if st.button("✨ Create New Account", use_container_width=True):
++            st.markdown("<h3 style='color: #f1f5f9; text-align: center;'>还没有账户？</h3>", unsafe_allow_html=True)
++            if st.button("✨ 创建新账户", use_container_width=True):
+                 st.session_state.page = "signup"
+                 st.rerun()
+     
+     elif st.session_state.page == "doctor_login":
+         col1, col2, col3 = st.columns([1, 2, 1])
+         with col2:
+-            if st.button("⬅️ Back to Role Selection", key="back_to_role_doc"):
++            if st.button("⬅️ 返回角色选择", key="back_to_role_doc"):
+                 st.session_state.page = "role_select"
+                 st.session_state.user_type = None
+                 st.rerun()
+@@ -390,63 +469,70 @@ if not st.session_state.role:
+             st.markdown("""
+             <div class="welcome-card">
+                 <div class="welcome-icon">👨‍⚕️</div>
+-                <h2 class="welcome-title">Doctor Login</h2>
+-                <p class="welcome-subtitle">Access patient management portal</p>
++                <h2 class="welcome-title">医生登录</h2>
++                <p class="welcome-subtitle">访问患者管理门户</p>
+             </div>
+             """, unsafe_allow_html=True)
+             
+             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+-            doc_user = st.text_input("Doctor Username", key="doc_user", value="doctor", placeholder="Enter doctor username")
+-            doc_pass = st.text_input("Password", type="password", key="doc_pass", value="doctor", placeholder="Enter password")
++            doc_user = st.text_input("医生用户名", key="doc_user", value="doctor", placeholder="请输入医生用户名")
++            doc_pass = st.text_input("密码", type="password", key="doc_pass", value="doctor", placeholder="请输入密码")
+             
+-            if st.button("🔓 Sign In as Doctor", use_container_width=True):
+-                r = requests.post(f"{API}/auth/doctor/login", json={"username": doc_user, "password": doc_pass})
+-                if r.ok:
+-                    j = r.json()
+-                    st.session_state.role = j["role"]
+-                    st.session_state.token = j["token"]
+-                    st.success("✅ Doctor logged in successfully!")
+-                    st.rerun()
+-                else:
+-                    st.error("❌ Invalid doctor credentials.")
++            if st.button("🔓 医生登录", use_container_width=True):
++                try:
++                    r = requests.post(f"{API}/auth/doctor/login", json={"username": doc_user, "password": doc_pass}, timeout=5)
++                    if r.ok:
++                        j = r.json()
++                        st.session_state.role = j["role"]
++                        st.session_state.token = j["token"]
++                        st.success("✅ 医生登录成功！")
++                        st.rerun()
++                    else:
++                        st.error("❌ 医生凭证无效。")
++                except requests.exceptions.ConnectionError:
++                    st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行（运行：uvicorn api.main:app --reload）")
++                except requests.exceptions.Timeout:
++                    st.error("❌ 请求超时，请稍后重试")
++                except Exception as e:
++                    st.error(f"❌ 发生错误：{str(e)}")
+             st.markdown("</div>", unsafe_allow_html=True)
+     
+     elif st.session_state.page == "signup":
+         col1, col2, col3 = st.columns([1, 2, 1])
+         with col2:
+-            if st.button("⬅️ Back to Login", key="back_to_login"):
++            if st.button("⬅️ 返回登录", key="back_to_login"):
+                 st.session_state.page = "login"
+                 st.rerun()
+             
+             st.markdown("""
+             <div class="welcome-card">
+                 <div class="welcome-icon">✨</div>
+-                <h2 class="welcome-title">Create Your Account</h2>
+-                <p class="welcome-subtitle">Join MemoryCare today</p>
++                <h2 class="welcome-title">创建您的账户</h2>
++                <p class="welcome-subtitle">立即加入 MemoryCare</p>
+             </div>
+             """, unsafe_allow_html=True)
+             
+             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+-            st.markdown("<h3 style='color: #f1f5f9;'>👤 Basic Information</h3>", unsafe_allow_html=True)
+-            su_user = st.text_input("Username *", key="su_user", placeholder="Choose a unique username")
+-            su_pass = st.text_input("Password *", type="password", key="su_pass", placeholder="Create a secure password")
+-            su_name = st.text_input("Full Name *", key="su_name", placeholder="Your full name")
++            st.markdown("<h3 style='color: #f1f5f9;'>👤 基本信息</h3>", unsafe_allow_html=True)
++            su_user = st.text_input("用户名 *", key="su_user", placeholder="请选择一个唯一的用户名")
++            su_pass = st.text_input("密码 *", type="password", key="su_pass", placeholder="请创建一个安全的密码")
++            su_name = st.text_input("全名 *", key="su_name", placeholder="请输入您的全名")
+             st.markdown("---")
+-            st.markdown("<h3 style='color: #f1f5f9;'>💙 Personal Details</h3>", unsafe_allow_html=True)
+-            su_family = st.text_area("Family Information", key="su_family", placeholder="Tell us about your family members", height=100)
+-            su_hobbies = st.text_area("Hobbies & Interests", key="su_hobbies", placeholder="What activities do you enjoy?", height=100)
++            st.markdown("<h3 style='color: #f1f5f9;'>💙 个人信息</h3>", unsafe_allow_html=True)
++            su_family = st.text_area("家庭信息", key="su_family", placeholder="请告诉我们您的家庭成员情况", height=100)
++            su_hobbies = st.text_area("兴趣爱好", key="su_hobbies", placeholder="您喜欢什么活动？", height=100)
+             st.markdown("---")
+-            st.markdown("<h3 style='color: #f1f5f9;'>🚨 Emergency Contact</h3>", unsafe_allow_html=True)
++            st.markdown("<h3 style='color: #f1f5f9;'>🚨 紧急联系人</h3>", unsafe_allow_html=True)
+             col_e1, col_e2 = st.columns(2)
+             with col_e1:
+-                su_em_name = st.text_input("Contact Name", key="su_em_name", placeholder="Emergency contact person")
++                su_em_name = st.text_input("联系人姓名", key="su_em_name", placeholder="紧急联系人姓名")
+             with col_e2:
+-                su_em_phone = st.text_input("Phone Number", key="su_em_phone", placeholder="Contact phone")
++                su_em_phone = st.text_input("电话号码", key="su_em_phone", placeholder="联系人电话")
+             st.markdown("</div>", unsafe_allow_html=True)
+             
+-            if st.button("🎉 Create Account", use_container_width=True):
++            if st.button("🎉 创建账户", use_container_width=True):
+                 if not su_user or not su_pass or not su_name:
+-                    st.error("❌ Please fill in all required fields (marked with *)")
++                    st.error("❌ 请填写所有必填字段（标有 * 的字段）")
+                 else:
+                     payload = {
+                         "username": su_user,
+@@ -457,19 +543,28 @@ if not st.session_state.role:
+                         "emergency_contact_phone": su_em_phone,
+                         "hobbies": su_hobbies,
+                     }
+-                    r = requests.post(f"{API}/auth/patient/signup", json=payload)
+-                    if r.ok:
+-                        st.success("✅ Account created successfully! Please login to continue.")
+-                        st.session_state.page = "login"
+-                        st.rerun()
+-                    else:
+-                        st.error(f"❌ Signup failed: {r.text}")
+-            st.markdown("<p style='text-align: center; color: #cbd5e1; margin-top: 1rem;'>* Required fields</p>", unsafe_allow_html=True)
++                    try:
++                        r = requests.post(f"{API}/auth/patient/signup", json=payload, timeout=5)
++                        if r.ok:
++                            st.success("✅ 账户创建成功！请登录以继续。")
++                            st.session_state.page = "login"
++                            st.rerun()
++                        else:
++                            st.error(f"❌ 注册失败：{r.text}")
++                    except requests.exceptions.ConnectionError:
++                        st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行（运行：uvicorn api.main:app --reload）")
++                    except requests.exceptions.Timeout:
++                        st.error("❌ 请求超时，请稍后重试")
++                    except Exception as e:
++                        st.error(f"❌ 发生错误：{str(e)}")
++            st.markdown("<p style='text-align: center; color: #cbd5e1; margin-top: 1rem;'>* 必填字段</p>", unsafe_allow_html=True)
+ 
+-# ==================== MAIN APP ====================
++# ==================== 主应用界面 ====================
++# 用户已登录，显示相应的主界面
+ else:
++    # ==================== 患者界面 ====================
+     if st.session_state.role == "patient":
+-        # START CONVERSATION
++        # 启动对话：如果是第一次进入，发送系统启动消息获取 AI 问候
+         if not st.session_state.conversation_started:
+             try:
+                 initial_greeting = {
+@@ -477,12 +572,18 @@ else:
+                     "message": "__SYSTEM_START__",
+                     "token": st.session_state.token,
+                 }
+-                r = requests.post(f"{API}/chat", json=initial_greeting)
++                r = requests.post(f"{API}/chat", json=initial_greeting, timeout=10)
+                 if r.ok:
+                     data = r.json()
+                     st.session_state.chat_log.append(("MemoryCare", data["reply"]))
+                     st.session_state.conversation_started = True
++            except requests.exceptions.ConnectionError:
++                st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行。")
++                st.info("💡 启动后端服务：在终端运行 `uvicorn api.main:app --reload --host 127.0.0.1 --port 8000`")
++            except requests.exceptions.Timeout:
++                st.warning("⏱️ 请求超时，请稍后重试")
+             except Exception as e:
++                st.error(f"❌ 启动对话失败：{str(e)}")
+                 print(f"Error starting conversation: {e}")
+         
+         col_left, col_right = st.columns([1, 2])
+@@ -492,7 +593,7 @@ else:
+             <div class="custom-card">
+                 <div class="card-header">
+                     <div class="card-icon icon-green">🎯</div>
+-                    <h3 class="card-title">Your Goals</h3>
++                    <h3 class="card-title">您的目标</h3>
+                 </div>
+             </div>
+             """, unsafe_allow_html=True)
+@@ -509,49 +610,49 @@ else:
+                     </div>
+                     """, unsafe_allow_html=True)
+             else:
+-                st.info("🎯 No goals assigned yet. Your doctor will set some goals for you soon!")
++                st.info("🎯 还没有分配目标。您的医生很快就会为您设置一些目标！")
+             
+             st.markdown(f"""
+             <div class="info-box">
+-                <div class="info-title">👋 Welcome, {st.session_state.patient_username}!</div>
++                <div class="info-title">👋 欢迎，{st.session_state.patient_username}！</div>
+                 <div class="info-text">
+-                    I'm here to chat with you, remind you about medications, and help you 
+-                    achieve your goals. Let's have a great conversation today!
++                    我在这里与您聊天，提醒您服药，并帮助您
++                    实现您的目标。让我们今天进行一次愉快的对话吧！
+                 </div>
+             </div>
+             """, unsafe_allow_html=True)
+-        # === Medication Dashboard === ## MEDICATION CARD UPDATE ISSUE 2 CLAUDE
++        # === 药物仪表板 ===
+             st.markdown(f"""
+             <div style="text-align: center; background: rgba(30, 27, 75, 0.6); padding: 1rem; border-radius: 12px; border: 1px solid rgba(147, 51, 234, 0.3); margin-bottom: 1rem;">
+-                <h3 style="color: #a855f7; margin: 0;">📅 {datetime.now().strftime('%A, %B %d, %Y')}</h3>
++                <h3 style="color: #a855f7; margin: 0;">📅 {format_chinese_date(datetime.now())}</h3>
+             </div>
+             """, unsafe_allow_html=True)
+             st.markdown("""
+             <div class="custom-card">
+                 <div class="card-header">
+                     <div class="card-icon icon-blue">💊</div>
+-                    <h3 class="card-title">Your Medications</h3>
++                    <h3 class="card-title">您的药物</h3>
+                 </div>
+             </div>
+             """, unsafe_allow_html=True)
+ 
+             try:
+-                med_resp = requests.get(f"{API}/patient/medications", params={"token": st.session_state.token})
++                med_resp = requests.get(f"{API}/patient/medications", params={"token": st.session_state.token}, timeout=5)
+                 
+                 if med_resp.ok:
+                     meds = med_resp.json().get("medications", [])
+                     
+                     if meds:
+                         for m in meds:
+-                            st.markdown(f"**{m['name']}** — {m['times_per_day']}x per day")
+-                            st.caption(f"🕒 {m['specific_times'] or 'No specific times'} | {m['instructions'] or ''}")
++                            st.markdown(f"**{m['name']}** — 每天 {m['times_per_day']} 次")
++                            st.caption(f"🕒 {m['specific_times'] or '无指定时间'} | {m['instructions'] or ''}")
+ 
+-                            # Get today's logs - FIX: Parse date properly
++                            # 获取今天的日志 - 修复：正确解析日期
+                             today_str = datetime.now().strftime("%Y-%m-%d")
+                             taken_today = []
+                             
+                             for log in m['logs']:
+-                                # Extract just the date part (YYYY-MM-DD) from the log
++                                # 从日志中提取日期部分（YYYY-MM-DD）
+                                 log_date = log['date'].split()[0] if ' ' in log['date'] else log['date']
+                                 if log_date == today_str and log.get('taken', True):
+                                     taken_today.append(log)
+@@ -559,38 +660,48 @@ else:
+                             taken_count = len(taken_today)
+                             remaining = m['times_per_day'] - taken_count
+                             
+-                            # Disable button if all doses taken
++                            # 如果所有剂量都已服用，禁用按钮
+                             button_disabled = taken_count >= m['times_per_day']
+-                            button_text = f"✅ Complete ({taken_count}/{m['times_per_day']})" if button_disabled else f"✅ Take {m['name']}"
++                            button_text = f"✅ 已完成 ({taken_count}/{m['times_per_day']})" if button_disabled else f"✅ 服用 {m['name']}"
+                             
+                             if st.button(button_text, key=f"take_{m['name']}", disabled=button_disabled):
+-                                log_resp = requests.post(
+-                                    f"{API}/patient/medications/log",
+-                                    params={"token": st.session_state.token, "med_name": m["name"]}
+-                                )
+-                                if log_resp.ok:
+-                                    st.success(f"Marked {m['name']} as taken!")
+-                                    st.rerun()
+-                                else:
+-                                    st.error(log_resp.json().get("detail", "Error logging medication"))
++                                try:
++                                    log_resp = requests.post(
++                                        f"{API}/patient/medications/log",
++                                        params={"token": st.session_state.token, "med_name": m["name"]},
++                                        timeout=5
++                                    )
++                                    if log_resp.ok:
++                                        st.success(f"已标记 {m['name']} 为已服用！")
++                                        st.rerun()
++                                    else:
++                                        st.error(log_resp.json().get("detail", "记录药物失败"))
++                                except requests.exceptions.ConnectionError:
++                                    st.error("❌ 无法连接到后端服务器")
++                                except Exception as e:
++                                    st.error(f"❌ 记录失败：{str(e)}")
+ 
+-                            # Display progress
++                            # 显示进度条
+                             progress_value = taken_count / m['times_per_day'] if m['times_per_day'] > 0 else 0
+                             st.progress(progress_value)
+                             
+                             if button_disabled:
+-                                st.caption(f"✅ All doses complete! ({taken_count}/{m['times_per_day']})")
++                                st.caption(f"✅ 所有剂量已完成！({taken_count}/{m['times_per_day']})")
+                             else:
+-                                st.caption(f"Taken {taken_count}/{m['times_per_day']} times today | {remaining} remaining")
++                                st.caption(f"今天已服用 {taken_count}/{m['times_per_day']} 次 | 剩余 {remaining} 次")
+                             
+                             st.markdown("---")
+                     else:
+-                        st.info("💊 No medications assigned yet.")
++                        st.info("💊 还没有分配药物。")
+                 else:
+-                    st.error(f"Error fetching medications: Status {med_resp.status_code}")
++                    st.error(f"获取药物信息失败：状态码 {med_resp.status_code}")
+                     
++            except requests.exceptions.ConnectionError:
++                st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行。")
++            except requests.exceptions.Timeout:
++                st.error("❌ 请求超时，请稍后重试")
+             except Exception as e:
+-                st.error(f"Failed to load medications: {e}")
++                st.error(f"❌ 加载药物失败：{str(e)}")
+ 
+ 
+         with col_right:
+@@ -598,12 +709,12 @@ else:
+             <div class="custom-card">
+                 <div class="card-header">
+                     <div class="card-icon icon-purple">💬</div>
+-                    <h3 class="card-title">Chat with MemoryCare</h3>
++                    <h3 class="card-title">与 MemoryCare 聊天</h3>
+                 </div>
+             </div>
+             """, unsafe_allow_html=True)
+             
+-            # Chat container with native Streamlit chat messages
++            # 聊天容器，使用 Streamlit 原生聊天消息组件
+             chat_container = st.container(height=450)
+             
+             with chat_container:
+@@ -612,28 +723,29 @@ else:
+                     <div style="display: flex; align-items: center; justify-content: center; height: 400px;">
+                         <div style="text-align: center;">
+                             <div style="font-size: 4rem; margin-bottom: 1rem;">💙</div>
+-                            <h3 style="color: #f1f5f9;">Loading your conversation...</h3>
++                            <h3 style="color: #f1f5f9;">正在加载您的对话...</h3>
+                         </div>
+                     </div>
+                     """, unsafe_allow_html=True)
+                 else:
+                     for who, text in st.session_state.chat_log:
+-                        if who == "You":
++                        if who == "您":  # 用户消息标识
+                             with st.chat_message("user", avatar="👤"):
+                                 st.write(text)
+                         else:
++                            # MemoryCare 助手的回复
+                             with st.chat_message("assistant", avatar="💙"):
+                                 st.write(text)
+             
+-            # Input form
++            # 输入表单
+             st.markdown("---")
+             
+             with st.form(key="chat_form", clear_on_submit=True):
+                 col_msg, col_btn = st.columns([4, 1])
+                 with col_msg:
+-                    msg = st.text_input("", key="chat_input", label_visibility="collapsed", placeholder="Say something...")
++                    msg = st.text_input("消息输入", key="chat_input", label_visibility="collapsed", placeholder="说点什么...")
+                 with col_btn:
+-                    send_btn = st.form_submit_button("📤 Send", use_container_width=True)
++                    send_btn = st.form_submit_button("📤 发送", use_container_width=True)
+                 
+                 if send_btn and msg:
+                     st.session_state.message_count += 1
+@@ -648,78 +760,95 @@ else:
+                         "message_count": st.session_state.message_count,
+                         "medication_taken": st.session_state.medication_taken
+                     }
+-                    r = requests.post(f"{API}/chat", json=payload)
+-                    if r.ok:
+-                        data = r.json()
+-                        st.session_state.chat_log.append(("You", msg))
+-                        st.session_state.chat_log.append(("MemoryCare", data["reply"]))
+-                        g_resp = requests.get(f"{API}/patient/goals", params={"token": st.session_state.token})
+-                        if g_resp.ok:
+-                            st.session_state.goals = g_resp.json().get("goals", [])
+-                        st.rerun()
+-                    else:
+-                        st.error("❌ Error sending message")
++                    try:
++                        r = requests.post(f"{API}/chat", json=payload, timeout=30)
++                        if r.ok:
++                            data = r.json()
++                            st.session_state.chat_log.append(("您", msg))  # 用户消息，使用中文标识
++                            st.session_state.chat_log.append(("MemoryCare", data["reply"]))  # AI 助手回复
++                            try:
++                                g_resp = requests.get(f"{API}/patient/goals", params={"token": st.session_state.token}, timeout=5)
++                                if g_resp.ok:
++                                    st.session_state.goals = g_resp.json().get("goals", [])
++                            except:
++                                pass  # 如果获取目标失败，不影响聊天
++                            st.rerun()
++                        else:
++                            st.error(f"❌ 发送消息失败：{r.text}")
++                    except requests.exceptions.ConnectionError:
++                        st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行。")
++                    except requests.exceptions.Timeout:
++                        st.error("❌ 请求超时，AI 响应时间较长，请稍后重试")
++                    except Exception as e:
++                        st.error(f"❌ 发送消息失败：{str(e)}")
+ 
++    # ==================== 医生界面 ====================
+     elif st.session_state.role == "doctor":
+         st.markdown("""
+         <div class="custom-card">
+             <div class="card-header">
+                 <div class="card-icon icon-orange">👨‍⚕️</div>
+-                <h3 class="card-title">Doctor Dashboard</h3>
++                <h3 class="card-title">医生工作台</h3>
+             </div>
+         </div>
+         """, unsafe_allow_html=True)
+         
+-        # Fetch all patients
++        # 获取所有患者
+         try:
+-            patients_response = requests.get(f"{API}/doctor/patients", params={"token": st.session_state.token})
++            patients_response = requests.get(f"{API}/doctor/patients", params={"token": st.session_state.token}, timeout=5)
+             if patients_response.ok:
+                 patients_data = patients_response.json()
+                 all_patients = patients_data.get("patients", [])
+             else:
+                 all_patients = []
++        except requests.exceptions.ConnectionError:
++            all_patients = []
++            st.error("❌ 无法连接到后端服务器。请确保后端服务正在运行。")
++        except requests.exceptions.Timeout:
++            all_patients = []
++            st.error("❌ 请求超时，请稍后重试")
+         except Exception as e:
+             all_patients = []
+-            st.error(f"Error fetching patients: {e}")
++            st.error(f"❌ 获取患者列表失败：{str(e)}")
+         
+-        st.markdown("<h3 style='color: #f1f5f9;'>Select Patient to Manage</h3>", unsafe_allow_html=True)
++        st.markdown("<h3 style='color: #f1f5f9;'>选择要管理的患者</h3>", unsafe_allow_html=True)
+         
+         if all_patients:
+-            patient_options = ["-- Select a patient --"] + [f"{p['full_name']} ({p['username']})" for p in all_patients]
++            patient_options = ["-- 请选择患者 --"] + [f"{p['full_name']} ({p['username']})" for p in all_patients]
+             patient_usernames = {f"{p['full_name']} ({p['username']})": p['username'] for p in all_patients}
+             
+             selected_patient = st.selectbox(
+-                "Choose from registered patients:",
++                "从已注册患者中选择：",
+                 options=patient_options,
+                 index=0,
+                 key="patient_selector"
+             )
+             
+-            if selected_patient != "-- Select a patient --":
++            if selected_patient != "-- 请选择患者 --":
+                 selected_username = patient_usernames[selected_patient]
+-                if st.button("✅ Select This Patient", use_container_width=True):
++                if st.button("✅ 选择此患者", use_container_width=True):
+                     st.session_state.patient_username = selected_username
+-                    st.success(f"✅ Now managing: **{selected_patient}**")
++                    st.success(f"✅ 正在管理：**{selected_patient}**")
+                     st.rerun()
+         else:
+-            st.warning("⚠️ No patients found in the system. Patients need to sign up first.")
+-            st.info("💡 Tip: You can still manually enter a username if you know it.")
++            st.warning("⚠️ 系统中没有找到患者。患者需要先注册。")
++            st.info("💡 提示：如果您知道用户名，仍然可以手动输入。")
+         
+-        with st.expander("🔍 Or manually enter patient username"):
+-            manual_username = st.text_input("Patient username", placeholder="Enter patient username manually")
+-            if st.button("✅ Select Manually"):
++        with st.expander("🔍 或手动输入患者用户名"):
++            manual_username = st.text_input("患者用户名", placeholder="请手动输入患者用户名")
++            if st.button("✅ 手动选择"):
+                 if manual_username:
+                     st.session_state.patient_username = manual_username
+-                    st.success(f"✅ Now managing: **{manual_username}**")
++                    st.success(f"✅ 正在管理：**{manual_username}**")
+                     st.rerun()
+                 else:
+-                    st.error("Please enter a username")
++                    st.error("请输入用户名")
+         
+         if st.session_state.patient_username:
+             st.markdown(f"""
+             <div class="info-box">
+-                <div class="info-title">Currently Managing</div>
+-                <div class="info-text">Patient: <strong>{st.session_state.patient_username}</strong></div>
++                <div class="info-title">当前管理</div>
++                <div class="info-text">患者：<strong>{st.session_state.patient_username}</strong></div>
+             </div>
+             """, unsafe_allow_html=True)
+             
+@@ -730,143 +859,159 @@ else:
+                 <div class="custom-card">
+                     <div class="card-header">
+                         <div class="card-icon icon-green">🎯</div>
+-                        <h3 class="card-title">Manage Goals</h3>
++                        <h3 class="card-title">管理目标</h3>
+                     </div>
+                 </div>
+                 """, unsafe_allow_html=True)
+ 
+-                # Fetch patient goals
++                # 获取患者目标
+                 try:
+                     goals_response = requests.get(
+                         f"{API}/doctor/patient-goals",
+                         params={
+                             "patient_username": st.session_state.patient_username,
+                             "token": st.session_state.token
+-                        }
++                        },
++                        timeout=5
+                     )
+                     if goals_response.ok:
+                         patient_goals = goals_response.json().get("goals", [])
+                     else:
+                         patient_goals = []
++                except requests.exceptions.ConnectionError:
++                    patient_goals = []
++                    st.error("❌ 无法连接到后端服务器")
+                 except Exception as e:
+                     patient_goals = []
+-                    st.error(f"Error fetching goals: {e}")
++                    st.error(f"❌ 获取目标失败：{str(e)}")
+ 
+-                # Show goal status tabs
+-                goal_tab1, goal_tab2 = st.tabs(["📝 Assign New Goal", "📊 Goal Status"])
++                # 显示目标状态标签页
++                goal_tab1, goal_tab2 = st.tabs(["📝 分配新目标", "📊 目标状态"])
+ 
+                 with goal_tab1:
+                     with st.form("add_goal"):
+-                        goal_text = st.text_area("Goal description", placeholder="e.g., Go for a short walk after dinner", height=100)
+-                        ok = st.form_submit_button("➕ Assign Goal", use_container_width=True)
++                        goal_text = st.text_area("目标描述", placeholder="例如：晚饭后散步 10 分钟", height=100)
++                        ok = st.form_submit_button("➕ 分配目标", use_container_width=True)
+                         if ok and goal_text:
+-                            r = requests.post(
+-                                f"{API}/doctor/goals",
+-                                params={
+-                                    "patient_username": st.session_state.patient_username,
+-                                    "token": st.session_state.token,
+-                                },
+-                                json={"text": goal_text},
+-                            )
+-                            if r.ok:
+-                                st.success("🎯 Goal assigned successfully!")
+-                                st.rerun()
+-                            else:
+-                                st.error(f"❌ {r.text}")
++                            try:
++                                r = requests.post(
++                                    f"{API}/doctor/goals",
++                                    params={
++                                        "patient_username": st.session_state.patient_username,
++                                        "token": st.session_state.token,
++                                    },
++                                    json={"text": goal_text},
++                                    timeout=5
++                                )
++                                if r.ok:
++                                    st.success("🎯 目标分配成功！")
++                                    st.rerun()
++                                else:
++                                    st.error(f"❌ {r.text}")
++                            except requests.exceptions.ConnectionError:
++                                st.error("❌ 无法连接到后端服务器")
++                            except Exception as e:
++                                st.error(f"❌ 分配目标失败：{str(e)}")
+ 
+                 with goal_tab2:
+                     if patient_goals:
+                         active_goals = [g for g in patient_goals if not g['completed']]
+                         completed_goals = [g for g in patient_goals if g['completed']]
+                         
+-                        # Show active goals
+-                        st.markdown("<h4 style='color: #10b981;'>✅ Active Goals</h4>", unsafe_allow_html=True)
++                        # 显示活跃目标
++                        st.markdown("<h4 style='color: #10b981;'>✅ 活跃目标</h4>", unsafe_allow_html=True)
+                         if active_goals:
+                             for g in active_goals:
+                                 st.markdown(f"""
+                                 <div class="goal-item">
+                                     <span style="font-size: 1.5rem;">⭕</span>
+                                     <span style="flex: 1; color: white; font-weight: 600;">{g['text']}</span>
+-                                    <span style="color: #e9d5ff; font-size: 0.9rem;">Assigned: {g['created_at'][:10]}</span>
++                                    <span style="color: #e9d5ff; font-size: 0.9rem;">分配时间：{g['created_at'][:10]}</span>
+                                 </div>
+                                 """, unsafe_allow_html=True)
+                         else:
+-                            st.info("No active goals assigned yet.")
++                            st.info("还没有分配活跃目标。")
+                         
+                         st.markdown("---")
+                         
+-                        # Show completed goals
+-                        st.markdown("<h4 style='color: #6b7280;'>🎉 Completed Goals</h4>", unsafe_allow_html=True)
++                        # 显示已完成目标
++                        st.markdown("<h4 style='color: #6b7280;'>🎉 已完成目标</h4>", unsafe_allow_html=True)
+                         if completed_goals:
+                             for g in completed_goals:
+-                                completed_date = g.get('completed_at_str', g.get('completed_at', 'Unknown')[:10] if g.get('completed_at') else 'Unknown')
++                                completed_date = g.get('completed_at_str', g.get('completed_at', '未知')[:10] if g.get('completed_at') else '未知')
+                                 st.markdown(f"""
+                                 <div class="goal-item goal-completed">
+                                     <span style="font-size: 1.5rem;">✅</span>
+                                     <span style="flex: 1; color: white; font-weight: 600;">{g['text']}</span>
+-                                    <span style="color: #d1d5db; font-size: 0.9rem;">Completed: {completed_date}</span>
++                                    <span style="color: #d1d5db; font-size: 0.9rem;">完成时间：{completed_date}</span>
+                                 </div>
+                                 """, unsafe_allow_html=True)
+                         else:
+-                            st.info("No completed goals yet.")
++                            st.info("还没有完成的目标。")
+                         
+-                        # Summary statistics
++                        # 统计摘要
+                         total_goals = len(patient_goals)
+                         completion_rate = (len(completed_goals) / total_goals * 100) if total_goals > 0 else 0
+                         
+                         st.markdown(f"""
+                         <div class="info-box" style="margin-top: 1rem;">
+-                            <div class="info-title">📈 Goal Progress Summary</div>
++                            <div class="info-title">📈 目标进度摘要</div>
+                             <div class="info-text">
+-                                Total Goals: <strong>{total_goals}</strong> | 
+-                                Active: <strong>{len(active_goals)}</strong> | 
+-                                Completed: <strong>{len(completed_goals)}</strong> | 
+-                                Completion Rate: <strong>{completion_rate:.1f}%</strong>
++                                总目标数：<strong>{total_goals}</strong> | 
++                                活跃：<strong>{len(active_goals)}</strong> | 
++                                已完成：<strong>{len(completed_goals)}</strong> | 
++                                完成率：<strong>{completion_rate:.1f}%</strong>
+                             </div>
+                         </div>
+                         """, unsafe_allow_html=True)
+                     else:
+-                        st.info("No goals assigned yet. Use the 'Assign New Goal' tab to create one.")
++                        st.info("还没有分配目标。请使用'分配新目标'标签页创建一个。")
+             
+             with col2:
+                 st.markdown("""
+                 <div class="custom-card">
+                     <div class="card-header">
+                         <div class="card-icon icon-blue">💊</div>
+-                        <h3 class="card-title">Add Medication</h3>
++                        <h3 class="card-title">添加药物</h3>
+                     </div>
+                 </div>
+                 """, unsafe_allow_html=True)
+                 
+                 with st.form("add_med"):
+-                    name = st.text_input("Medication name", placeholder="e.g., Aspirin")
+-                    tpd = st.number_input("Times per day", min_value=1, max_value=6, value=3)
+-                    times = st.text_input("Specific times (HH:MM)", value="09:00,14:00,20:00")
+-                    instr = st.text_area("Instructions", value="Take with water.", height=80)
+-                    ok = st.form_submit_button("➕ Add Medication", use_container_width=True)
++                    name = st.text_input("药物名称", placeholder="例如：阿司匹林")
++                    tpd = st.number_input("每天次数", min_value=1, max_value=6, value=3)
++                    times = st.text_input("具体时间 (时:分)", value="09:00,14:00,20:00")
++                    instr = st.text_area("服用说明", value="与大量水一起服用。", height=80)
++                    ok = st.form_submit_button("➕ 添加药物", use_container_width=True)
+                     if ok and name:
+-                        r = requests.post(
+-                            f"{API}/doctor/medications",
+-                            params={"token": st.session_state.token},
+-                            json={
+-                                "patient_username": st.session_state.patient_username,
+-                                "name": name,
+-                                "times_per_day": int(tpd),
+-                                "specific_times": times.strip(),
+-                                "instructions": instr,
+-                                "active": True,
+-                            },
+-                        )
+-                        if r.ok:
+-                            st.success("💊 Medication added successfully!")
+-                        else:
+-                            st.error(f"❌ {r.text}")
++                        try:
++                            r = requests.post(
++                                f"{API}/doctor/medications",
++                                params={"token": st.session_state.token},
++                                json={
++                                    "patient_username": st.session_state.patient_username,
++                                    "name": name,
++                                    "times_per_day": int(tpd),
++                                    "specific_times": times.strip(),
++                                    "instructions": instr,
++                                    "active": True,
++                                },
++                                timeout=5
++                            )
++                            if r.ok:
++                                st.success("💊 药物添加成功！")
++                            else:
++                                st.error(f"❌ {r.text}")
++                        except requests.exceptions.ConnectionError:
++                            st.error("❌ 无法连接到后端服务器")
++                        except Exception as e:
++                            st.error(f"❌ 添加药物失败：{str(e)}")
+                 
+                 st.markdown("""
+                 <div class="custom-card">
+                     <div class="card-header">
+                         <div class="card-icon icon-blue">📊</div>
+-                        <h3 class="card-title">Medication Status</h3>
++                        <h3 class="card-title">药物状态</h3>
+                     </div>
+                 </div>
+                 """, unsafe_allow_html=True)
+@@ -874,37 +1019,42 @@ else:
+                 try:
+                     med_hist_resp = requests.get(
+                         f"{API}/doctor/patient-medications",
+-                        params={"patient_username": st.session_state.patient_username, "token": st.session_state.token}
++                        params={"patient_username": st.session_state.patient_username, "token": st.session_state.token},
++                        timeout=5
+                     )
+                     if med_hist_resp.ok:
+                         meds = med_hist_resp.json().get("medications", [])
+                         if meds:
+                             for m in meds:
+-                                st.markdown(f"**{m['name']}** — {m['times_per_day']}x/day | {m['specific_times']}")
++                                st.markdown(f"**{m['name']}** — 每天 {m['times_per_day']} 次 | {m['specific_times']}")
+                                 st.caption(f"📝 {m['instructions'] or ''}")
+ 
+                                 logs = m.get('logs', [])
+                                 recent_logs = [l for l in logs if l['date'] == datetime.now().strftime("%Y-%m-%d")]
+                                 taken_today = sum(1 for l in recent_logs if l['taken'])
+                                 st.progress(taken_today / m['times_per_day'])
+-                                st.caption(f"Taken {taken_today}/{m['times_per_day']} times today")
++                                st.caption(f"今天已服用 {taken_today}/{m['times_per_day']} 次")
+ 
+-                                with st.expander("📅 View History"):
++                                with st.expander("📅 查看历史记录"):
+                                     for l in logs[-10:]:
+                                         st.write(f"{l['date']} — {'✅' if l['taken'] else '❌'} {l.get('time_taken', '')}")
+                         else:
+-                            st.info("No medications found for this patient.")
++                            st.info("该患者没有找到药物。")
+                     else:
+-                        st.error("Failed to fetch medication history.")
++                        st.error("获取药物历史记录失败。")
++                except requests.exceptions.ConnectionError:
++                    st.error("❌ 无法连接到后端服务器")
++                except requests.exceptions.Timeout:
++                    st.error("❌ 请求超时，请稍后重试")
+                 except Exception as e:
+-                    st.error(f"Error: {e}")
++                    st.error(f"❌ 错误：{str(e)}")
+ 
+ 
+         else:
+             st.markdown("""
+             <div style="text-align: center; padding: 3rem; background: rgba(30, 27, 75, 0.6); border-radius: 20px; border: 2px solid rgba(147, 51, 234, 0.3); margin-top: 2rem;">
+                 <div style="font-size: 4rem; margin-bottom: 1rem;">🏥</div>
+-                <h3 style="color: #f1f5f9;">Select a Patient to Begin</h3>
+-                <p style="color: #cbd5e1;">Choose a patient from the dropdown above to manage their care</p>
++                <h3 style="color: #f1f5f9;">请选择患者开始</h3>
++                <p style="color: #cbd5e1;">请从上方下拉菜单中选择一个患者来管理他们的护理</p>
+             </div>
+-            """, unsafe_allow_html=True)
+\ No newline at end of file
++            """, unsafe_allow_html=True)
+diff --git a/utils/auth.py b/utils/auth.py
+index 0d850e0..ba5bc1e 100644
+--- a/utils/auth.py
++++ b/utils/auth.py
+@@ -1,27 +1,122 @@
+ # memorycare_app/utils/auth.py
++"""
++认证和授权模块
++
++本模块实现了简单的基于 Token 的身份验证系统。
++支持医生和患者两种角色，使用内存存储 Token（生产环境应使用 Redis 或数据库）。
++
++注意：这是简化版实现，生产环境需要：
++1. 使用 JWT 或 OAuth2
++2. 密码哈希加密（bcrypt/argon2）
++3. Token 持久化存储
++4. 刷新 Token 机制
++"""
++
+ from typing import Optional
+ from datetime import datetime, timedelta
+ import secrets
+ 
++# Token 存储字典：内存中的临时存储
++# 键：Token 字符串
++# 值：包含角色、用户名和过期时间的字典
++# 注意：服务器重启后所有 Token 会失效
+ _tokens = {}  # token -> {"role": "doctor"|"patient", "username": str, "expires": datetime}
+ 
++
+ def issue_doctor_token(username: str, password: str) -> Optional[str]:
++    """
++    为医生用户颁发认证 Token
++    
++    参数:
++        username: 医生用户名
++        password: 医生密码
++        
++    返回:
++        Optional[str]: 如果认证成功返回 Token 字符串，否则返回 None
++        
++    注意:
++        - 当前实现使用硬编码的凭证（doctor/doctor）
++        - 生产环境应从数据库验证并返回错误信息
++    """
++    # 验证医生凭证：当前使用硬编码验证
++    # 生产环境应该从数据库查询并验证密码哈希
+     if username == "doctor" and password == "doctor":
++        # 生成安全的随机 Token：使用 secrets 模块生成 URL 安全的随机字符串
+         token = "doc_" + secrets.token_urlsafe(16)
+-        _tokens[token] = {"role": "doctor", "username": "doctor", "expires": datetime.utcnow() + timedelta(hours=8)}
++        print(f"[DEBUG] Issued doctor token: {token}")
++        
++        # 存储 Token 信息：包括角色、用户名和过期时间（8小时后）
++        _tokens[token] = {
++            "role": "doctor",
++            "username": "doctor",
++            "expires": datetime.utcnow() + timedelta(hours=8)  # Token 有效期 8 小时
++        }
+         return token
++    
++    # 认证失败返回 None
+     return None
+ 
++
+ def issue_patient_token(username: str) -> str:
++    """
++    为患者用户颁发认证 Token
++    
++    参数:
++        username: 患者用户名（已通过登录验证）
++        
++    返回:
++        str: 患者 Token 字符串
++        
++    注意:
++        - 此函数假设用户名已经通过密码验证
++        - 调用此函数前应确保患者存在且密码正确
++    """
++    # 生成安全的随机 Token：使用 secrets 模块生成 URL 安全的随机字符串
+     token = "pat_" + secrets.token_urlsafe(16)
+-    _tokens[token] = {"role": "patient", "username": username, "expires": datetime.utcnow() + timedelta(hours=8)}
++    print(f"[DEBUG] Issued patient token: {token}")
++    
++    # 存储 Token 信息：包括角色、用户名和过期时间（8小时后）
++    _tokens[token] = {
++        "role": "patient",
++        "username": username,
++        "expires": datetime.utcnow() + timedelta(hours=8)  # Token 有效期 8 小时
++    }
+     return token
+ 
++
+ def whoami(token: str) -> Optional[dict]:
++    """
++    根据 Token 获取用户身份信息
++    
++    参数:
++        token: 用户提供的认证 Token
++        
++    返回:
++        Optional[dict]: 如果 Token 有效，返回包含角色和用户名的字典：
++            {
++                "role": "doctor" | "patient",
++                "username": str,
++                "expires": datetime
++            }
++            如果 Token 无效或已过期，返回 None
++            
++    使用场景:
++        - API 端点验证用户身份
++        - 检查用户权限（医生 vs 患者）
++        - 获取当前登录用户信息
++    """
++    # 从 Token 存储中查找用户信息
+     info = _tokens.get(token)
++    
++    # 如果 Token 不存在，返回 None
+     if not info:
+         return None
++    
++    # 检查 Token 是否已过期
+     if info["expires"] < datetime.utcnow():
++        # Token 已过期，从存储中删除并返回 None
+         del _tokens[token]
+         return None
++    
++    # Token 有效，返回用户信息
+     return info
+diff --git a/utils/db.py b/utils/db.py
+index c90a7fc..13947f4 100644
+--- a/utils/db.py
++++ b/utils/db.py
+@@ -1,12 +1,52 @@
+ # memorycare_app/utils/db.py
++"""
++数据库连接和初始化模块
++
++本模块负责数据库引擎的创建、会话管理和表结构的初始化。
++使用 SQLite 作为数据库，SQLModel 作为 ORM 框架。
++"""
++
+ from sqlmodel import SQLModel, create_engine, Session
+ 
++# 数据库连接 URL：使用 SQLite 数据库，文件名为 app.db
++# SQLite 是轻量级嵌入式数据库，适合单机应用
+ DB_URL = "sqlite:///app.db"
++
++# 创建数据库引擎：用于连接数据库和执行 SQL 操作
++# echo=False 表示不在控制台输出 SQL 语句（设为 True 可用于调试）
+ engine = create_engine(DB_URL, echo=False)
+ 
++
+ def get_session() -> Session:
++    """
++    获取数据库会话对象
++    
++    返回:
++        Session: SQLModel 会话对象，用于执行数据库操作
++        
++    使用示例:
++        with get_session() as session:
++            patient = session.get(Patient, patient_id)
++    """
+     return Session(engine)
+ 
++
+ def create_db_and_tables():
++    """
++    创建数据库和所有表结构
++    
++    此函数会检查数据库文件是否存在，如果不存在则创建。
++    然后根据模型中定义的表结构创建所有数据表。
++    
++    注意：
++        - 此函数应该在应用启动时调用一次
++        - 如果表已存在，不会重复创建
++        - 不会删除或修改现有表结构（需要手动迁移）
++    """
++    # 导入所有模型类，确保 SQLModel 能够识别所有表定义
++    # 延迟导入避免循环依赖
+     from .models import Patient, Medication, Goal, MedicationLog
+-    SQLModel.metadata.create_all(engine)
+\ No newline at end of file
++    
++    # 根据所有已注册的 SQLModel 类创建对应的数据表
++    # 如果表已存在，此操作不会报错
++    SQLModel.metadata.create_all(engine)
+diff --git a/utils/llm_client.py b/utils/llm_client.py
+index 3044848..b90b40a 100644
+--- a/utils/llm_client.py
++++ b/utils/llm_client.py
+@@ -1,33 +1,223 @@
+ # memorycare_app/utils/llm_client.py
+-import os, requests
++"""
++OpenAI LLM 客户端模块
+ 
+-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "INSERT API KEY"
+-                           )
++本模块封装了与 OpenAI API 的交互，提供统一的聊天接口。
++支持模型回退机制，如果首选模型不可用，会自动尝试备用模型。
++"""
++
++import os
++import requests
++import logging
++
++# 配置日志记录器
++logger = logging.getLogger(__name__)
++# 只在根日志记录器未配置时才配置
++if not logging.root.handlers:
++    logging.basicConfig(
++        level=logging.DEBUG,
++        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
++    )
++
++# 确保加载 .env 文件（如果还没有加载）
++# 这很重要，因为模块级别的环境变量读取可能在 load_dotenv() 之前执行
++_dotenv_loaded = False
++try:
++    # 尝试导入 load_dotenv 函数
++    from dotenv import load_dotenv  # type: ignore
++    # 调用 load_dotenv() 加载 .env 文件
++    # override=False 表示如果环境变量已存在，则不覆盖它们
++    load_dotenv(override=False)
++    _dotenv_loaded = True
++    logger.debug("✅ 已加载 .env 文件")
++except ImportError as e:
++    # python-dotenv 未安装，这是正常的（如果 api/main.py 中已经加载了）
++    logger.debug(f"dotenv 模块未找到（可能已在其他地方加载）: {e}")
++except Exception as e:
++    logger.warning(f"⚠️ 加载 .env 文件时出错：{type(e).__name__}: {e}")
++    import traceback
++    logger.debug(traceback.format_exc())
++
++# 从环境变量获取 OpenAI API 密钥
++# 如果未设置，将使用默认值（会导致 API 调用失败）
++OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "INSERT API KEY")
++
++# 调试日志：记录 API Key 的加载状态（只显示前几个字符以保护隐私）
++if OPENAI_API_KEY and OPENAI_API_KEY != "INSERT API KEY":
++    api_key_preview = OPENAI_API_KEY[:8] + "..." if len(OPENAI_API_KEY) > 8 else "***"
++    logger.info(f"✅ OPENAI_API_KEY 已加载（预览：{api_key_preview}）")
++else:
++    logger.error("❌ OPENAI_API_KEY 未设置或使用默认值")
++
++# OpenAI API 基础 URL：默认为官方 API 地址
++# 可以设置为自定义代理或兼容 OpenAI API 的服务
+ OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+-# choose a model you have access to in your org/project
++
++# 调试日志：记录 Base URL
++logger.info(f"📡 OPENAI_BASE_URL = {OPENAI_BASE}")
++
++# 首选模型：从环境变量读取，如果未设置则为空字符串
++# 用户可以在 .env 文件中设置 OPENAI_MODEL 来指定首选模型
+ PREFERRED = os.getenv("OPENAI_MODEL", "").strip()
+-FALLBACKS = [m for m in [PREFERRED, "gpt-4.1-mini"] if m]
++
++# 调试日志：记录模型配置
++if PREFERRED:
++    logger.info(f"🎯 首选模型 OPENAI_MODEL = '{PREFERRED}'")
++else:
++    logger.warning("⚠️ OPENAI_MODEL 未设置，将使用备用模型")
++
++# 模型回退列表：包含首选模型和备用模型
++# 如果首选模型不可用，会依次尝试列表中的其他模型
++# 过滤掉空字符串，确保列表中只包含有效的模型名
++FALLBACKS = [m for m in [PREFERRED, "qwen-max"] if m]
++
++# 调试日志：记录最终的模型列表
++logger.info(f"📋 模型回退列表：{FALLBACKS}")
++
++# 检查所有环境变量
++logger.debug("=" * 60)
++logger.debug("环境变量检查：")
++logger.debug(f"  OPENAI_API_KEY: {'已设置' if OPENAI_API_KEY and OPENAI_API_KEY != 'INSERT API KEY' else '未设置'}")
++logger.debug(f"  OPENAI_BASE_URL: {OPENAI_BASE}")
++logger.debug(f"  OPENAI_MODEL: '{PREFERRED}' (原始值)")
++logger.debug(f"  最终模型列表: {FALLBACKS}")
++logger.debug("=" * 60)
++
+ 
+ def chat(system_text: str, messages: list) -> str:
+-    if not OPENAI_API_KEY:
++    """
++    调用 OpenAI API 进行对话
++    
++    参数:
++        system_text: 系统提示词，定义 AI 的角色和行为
++        messages: 消息列表，格式为 [{"role": "user", "content": "..."}, ...]
++                 role 可以是 "user"、"assistant" 或 "system"
++        
++    返回:
++        str: AI 的回复文本
++             如果所有模型都不可用或 API 密钥缺失，返回错误提示字符串
++        
++    工作流程:
++        1. 检查 API 密钥是否存在
++        2. 遍历模型列表（首选模型 -> 备用模型）
++        3. 尝试调用每个模型，直到成功或所有模型都失败
++        4. 返回第一个成功的响应，或错误提示
++        
++    异常处理:
++        - 如果某个模型调用失败，会静默继续尝试下一个模型
++        - 所有模型都失败时返回友好的错误提示
++    """
++    logger.debug("=" * 60)
++    logger.debug("开始调用 chat() 函数")
++    logger.debug(f"系统提示词长度: {len(system_text)} 字符")
++    logger.debug(f"消息数量: {len(messages)}")
++    
++    # 检查 API 密钥：如果未设置，直接返回错误提示
++    if not OPENAI_API_KEY or OPENAI_API_KEY == "INSERT API KEY":
++        logger.error("❌ API 密钥缺失或未正确设置")
++        logger.error(f"   当前 OPENAI_API_KEY 值: '{OPENAI_API_KEY}'")
+         return "[OpenAI key missing]"
+ 
++    # 检查模型列表是否为空
++    if not FALLBACKS:
++        logger.error("❌ 模型列表为空，没有可用的模型")
++        return "[No models configured. Please set OPENAI_MODEL in .env file.]"
++
++    # 准备 HTTP 请求头：包含认证信息和内容类型
+     headers = {
+-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+-        "Content-Type": "application/json",
++        "Authorization": f"Bearer {OPENAI_API_KEY}",  # Bearer Token 认证
++        "Content-Type": "application/json",  # JSON 内容类型
+     }
++    
++    logger.debug(f"请求 URL: {OPENAI_BASE}/chat/completions")
++    logger.debug(f"将尝试 {len(FALLBACKS)} 个模型: {FALLBACKS}")
+ 
+-    for model in FALLBACKS:
+-        body = {"model": model, "messages": [{"role": "system", "content": system_text}, *messages]}
++    # 遍历模型列表，尝试每个模型直到成功
++    for idx, model in enumerate(FALLBACKS, 1):
++        logger.info(f"🔄 尝试模型 {idx}/{len(FALLBACKS)}: {model}")
++        
++        # 构建请求体：包含模型名和消息列表
++        # 系统提示词作为第一条 system 消息
++        body = {
++            "model": model,
++            "messages": [
++                {"role": "system", "content": system_text},  # 系统角色消息
++                *messages  # 展开用户和助手的历史消息
++            ]
++        }
++        
++        # 使用 JSON 格式输出 body.messages 的所有内容（类似 jq 格式）
++        import json
++        logger.debug(f"请求体（模型: {model}）:")
++        logger.debug(f"  - 消息数量: {len(body['messages'])}")
++        logger.debug(f"  - messages 内容 (JSON 格式):")
++        logger.debug(json.dumps(body['messages'], indent=2, ensure_ascii=False))
++        
+         try:
+-            r = requests.post(f"{OPENAI_BASE}/chat/completions", headers=headers, json=body, timeout=60)
++            # 发送 POST 请求到 OpenAI Chat Completions API
++            # timeout=60 表示请求超时时间为 60 秒
++            logger.debug(f"发送请求到: {OPENAI_BASE}/chat/completions")
++            r = requests.post(
++                f"{OPENAI_BASE}/chat/completions",
++                headers=headers,
++                json=body,
++                timeout=60
++            )
++            
++            logger.debug(f"响应状态码: {r.status_code}")
++            
++            # 如果请求成功（状态码 200）
+             if r.status_code == 200:
++                # 解析 JSON 响应
+                 data = r.json()
+-                return data["choices"][0]["message"]["content"]
++                # 提取 AI 的回复内容
++                # choices[0] 是第一个（通常也是唯一的）回复选项
++                # message.content 包含实际的文本回复
++                reply = data["choices"][0]["message"]["content"]
++                logger.info(f"✅ 模型 {model} 调用成功！")
++                logger.debug(f"回复长度: {len(reply)} 字符")
++                logger.debug(f"回复: {reply}")
++                logger.debug("=" * 60)
++                return reply
+             else:
+-                # try next model
++                # 请求失败（如模型不可用、配额不足等），继续尝试下一个模型
++                error_detail = ""
++                try:
++                    error_data = r.json()
++                    error_detail = error_data.get("error", {}).get("message", "未知错误")
++                    error_type = error_data.get("error", {}).get("type", "未知类型")
++                    logger.warning(f"❌ 模型 {model} 调用失败:")
++                    logger.warning(f"   状态码: {r.status_code}")
++                    logger.warning(f"   错误类型: {error_type}")
++                    logger.warning(f"   错误信息: {error_detail}")
++                except:
++                    logger.warning(f"❌ 模型 {model} 调用失败: 状态码 {r.status_code}, 响应: {r.text[:200]}")
++                
++                # 继续尝试下一个模型
++                logger.debug(f"继续尝试下一个模型...")
+                 continue
+-        except Exception:
++                
++        except requests.exceptions.Timeout:
++            logger.error(f"⏱️ 模型 {model} 请求超时（60秒）")
++            continue
++        except requests.exceptions.ConnectionError as e:
++            logger.error(f"🔌 模型 {model} 连接错误: {str(e)}")
++            continue
++        except requests.exceptions.RequestException as e:
++            logger.error(f"🌐 模型 {model} 请求异常: {type(e).__name__}: {str(e)}")
++            continue
++        except Exception as e:
++            # 发生其他异常（如网络错误、超时等），继续尝试下一个模型
++            logger.error(f"💥 模型 {model} 发生未预期的异常: {type(e).__name__}: {str(e)}")
++            import traceback
++            logger.debug(traceback.format_exc())
+             continue
+ 
+-    return "[All configured models unavailable in this project. Please set OPENAI_MODEL to one you can use.]"
+\ No newline at end of file
++    # 所有模型都失败，返回友好的错误提示
++    logger.error("=" * 60)
++    logger.error("❌ 所有模型都调用失败！")
++    logger.error(f"   尝试的模型: {FALLBACKS}")
++    logger.error(f"   API Base URL: {OPENAI_BASE}")
++    logger.error(f"   API Key: {'已设置' if OPENAI_API_KEY and OPENAI_API_KEY != 'INSERT API KEY' else '未设置'}")
++    logger.error("=" * 60)
++    return "[All configured models unavailable in this project. Please set OPENAI_MODEL to one you can use.]"
+diff --git a/utils/memmachine_client.py b/utils/memmachine_client.py
+index 68c4fe0..ea9af1e 100644
+--- a/utils/memmachine_client.py
++++ b/utils/memmachine_client.py
+@@ -1,220 +1,419 @@
++# memorycare_app/utils/memmachine_client.py
++"""
++MemMachine 客户端模块
++
++本模块封装了与 MemMachine 持久化记忆服务的交互。
++MemMachine 是一个外部服务，用于存储和检索用户的长期记忆。
++
++核心功能：
++1. 存储情景记忆（episodic memory）：对话、事件等临时性记忆
++2. 存储档案记忆（profile memory）：用户偏好、个人信息等永久性记忆
++3. 检索记忆：根据查询条件搜索相关记忆
++"""
++
+ import os
+ import uuid
++import json
+ from typing import List, Dict, Any, Optional
+ import requests
+ 
++# MemMachine 服务的基础 URL
++# 从环境变量 MEMMACHINE_BASE_URL 读取，如果未设置则使用默认值 localhost:8080
+ BASE_URL = os.getenv("MEMMACHINE_BASE_URL", "http://localhost:8080")
+ 
++
+ class MemMachine:
++    """
++    MemMachine 客户端类
++    
++    提供与 MemMachine 服务交互的所有方法，包括存储和检索记忆。
++    """
++    
+     def __init__(self, base_url: Optional[str] = None):
++        """
++        初始化 MemMachine 客户端
++        
++        参数:
++            base_url: 可选，MemMachine 服务的 URL
++                     如果未提供，使用环境变量或默认值
++        """
++        # 使用提供的 base_url，或回退到环境变量/默认值
+         self.base_url = base_url or BASE_URL
+ 
+     def health(self) -> Dict[str, Any]:
++        """
++        检查 MemMachine 服务的健康状态
++        
++        返回:
++            Dict[str, Any]: 服务健康状态信息
++            
++        异常:
++            如果服务不可用，会抛出 requests.HTTPError
++        """
++        # 发送 GET 请求到健康检查端点
+         r = requests.get(f"{self.base_url}/health", timeout=10)
++        # 如果状态码不是 2xx，抛出异常
+         r.raise_for_status()
++        # 返回 JSON 响应
+         return r.json()
+ 
+     def remember(self, user_id: str, text: str, tags: Optional[List[str]] = None) -> Dict[str, Any]:
+         """
+-        Stores a new memory in MemMachine using the v1/memories endpoint format.
++        存储一条情景记忆（episodic memory）
++        
++        情景记忆用于存储临时性的事件和对话，如：
++        - 用户今天说了什么
++        - 发生了什么事情
++        - 对话历史
++        
++        参数:
++            user_id: 用户唯一标识符（通常是用户名）
++            text: 要存储的记忆内容文本
++            tags: 可选，标签列表，用于分类和检索，如 ["medication_log", "emotional"]
++            
++        返回:
++            Dict[str, Any]: MemMachine 返回的响应数据
++            
++        异常:
++            如果存储失败，会抛出 requests.HTTPError
+         """
++        # 构建 MemMachine API 请求负载
+         payload = {
++            # 会话信息：标识这次记忆存储的上下文
+             "session": {
+-                "group_id": user_id,
+-                "agent_id": ["memorycare_app"],
+-                "user_id": [user_id],
+-                "session_id": str(uuid.uuid4())
++                "group_id": user_id,  # 用户组 ID，用于组织相关记忆
++                "agent_id": ["memorycare_app"],  # 应用标识符
++                "user_id": [user_id],  # 用户 ID 列表
++                #"session_id": str(uuid.uuid4())  # 唯一会话 ID
++                "session_id": user_id  # 唯一会话 ID
+             },
+-            "producer": "memorycare_app",
+-            "produced_for": user_id,
+-            "episode_content": text,
+-            "episode_type": "memory_entry",
++            "producer": user_id,  # 记忆的生产者（应用名称）
++            "produced_for": user_id,  # 记忆的目标用户
++            "episode_content": text,  # 记忆的实际内容
++            "episode_type": "memory_entry",  # 记忆类型
+             "metadata": {
+-                "tags": tags or [],
+-                "actual_user_id": user_id
++                "tags": tags or [],  # 标签列表，用于分类
++                "actual_user_id": user_id  # 实际用户 ID（用于过滤）
+             }
+         }
+ 
++        # 发送 POST 请求到 MemMachine 的记忆存储端点
++        print(f"[INFO - remember()] Storing memory for {user_id} ...")
++        print(f"[INFO - remember()] Payload: {json.dumps(payload, indent=4)}")
+         r = requests.post(f"{self.base_url}/v1/memories", json=payload, timeout=20)
++        print(f"[INFO - remember()] Response: {r.text}")
++        # 检查响应状态，如果不是 2xx 则抛出异常
+         r.raise_for_status()
++        # 返回 JSON 响应
+         return r.json()
+ 
+     def remember_profile(self, user_id: str, key: str, value: str, category: Optional[str] = None) -> Dict[str, Any]:
+-        """Store profile memory - permanent facts about the user."""
++        """
++        存储一条档案记忆（profile memory）
++        
++        档案记忆用于存储永久性的用户信息，如：
++        - 用户偏好（喜欢什么、不喜欢什么）
++        - 个人信息（家庭成员、兴趣爱好）
++        - 医疗信息（药物、过敏史）
++        
++        参数:
++            user_id: 用户唯一标识符
++            key: 记忆的键名，如 "favorite_food"、"emergency_contact"
++            value: 记忆的值，如 "pizza"、"John - 123-456-7890"
++            category: 可选，记忆分类，如 "personal"、"medical"、"preference"
++            
++        返回:
++            Dict[str, Any]: 包含 "ok" 键的字典，表示存储是否成功
++                           如果失败，可能包含 "error" 键
++        """
++        # 构建档案记忆的请求负载
+         payload = {
+             "session": {
+-                "group_id": "memorycare_group",
++                "group_id": "memorycare_group",  # 使用固定的组 ID 用于档案记忆
+                 "agent_id": ["memorycare_app"],
+                 "user_id": [user_id],
+-                "session_id": str(uuid.uuid4())
++                #"session_id": str(uuid.uuid4())
++                "session_id": user_id
+             },
+-            "producer": "memorycare_app",
++            "producer": user_id,
+             "produced_for": user_id,
+-            "episode_content": f"{key}: {value}",  # Store as episode content
+-            "episode_type": category or "profile_info",
++            "episode_content": f"{key}: {value}",  # 将键值对存储为文本内容
++            "episode_type": category or "profile_info",  # 使用分类作为类型
+             "metadata": {
+-                "type": "profile",
+-                "key": key,
+-                "value": value,
+-                "category": category or "personal",
+-                "actual_user_id": user_id
+-
++                "type": "profile",  # 标记为档案类型
++                "key": key,  # 存储键名
++                "value": value,  # 存储值
++                "category": category or "personal",  # 分类
++                "actual_user_id": user_id  # 实际用户 ID
+             }
+         }
++        print(f"[INFO - remember_profile()] Storing profile memory for {user_id} ...")
++        print(f"[INFO - remember_profile()] Payload: {json.dumps(payload, indent=4)}")
++        
+         try:
+-            # Use /v1/memories/profile endpoint
++            # 发送 POST 请求到档案记忆端点
+             r = requests.post(f"{self.base_url}/v1/memories/profile", json=payload, timeout=20)
++            print(f"[INFO - remember_profile()] Response: {r.text}")
++            
++            # 检查响应状态码
+             if r.status_code not in (200, 201):
++                # 如果失败，打印警告信息
+                 print("[WARN] profile write failed:", r.text)
++            
++            # 返回成功状态
+             return {"ok": r.status_code in (200, 201)}
+         except Exception as e:
++            # 捕获异常并返回错误信息
+             print("[ERROR] profile write exception:", e)
+             return {"ok": False, "error": str(e)}
+ 
+     def retrieve(self, user_id: str, query: Optional[str] = None, top_k: int = 10) -> list:
+         """
+-        Retrieve episodic memories for a user.
+-        Handles the nested response format:
+-        {"status":0, "content":{"episodic_memory":[[], [ {...}, {...} ], [""]]}}
++        检索用户的情景记忆
++        
++        根据查询条件搜索并返回相关的记忆。支持语义搜索，可以理解查询的意图。
++        
++        参数:
++            user_id: 用户唯一标识符
++            query: 可选，搜索查询文本，如 "medication"、"family"
++                  如果为 None，返回所有记忆
++            top_k: 返回的最大记忆数量，默认 10
++                   注意：实际请求时会请求 top_k * 3 条，然后过滤后返回 top_k 条
++            
++        返回:
++            list: 记忆对象列表，每个对象包含记忆内容和元数据
++                  如果检索失败或没有匹配的记忆，返回空列表
++                  
++        记忆过滤:
++            - 只返回属于指定用户的记忆（通过 actual_user_id 过滤）
++            - 防止用户看到其他用户的记忆
++            
++        响应格式处理:
++            MemMachine 返回的格式可能是嵌套的：
++            {"status": 0, "content": {"episodic_memory": [[], [{...}, {...}], [""]]}}
++            本方法会处理多种可能的响应格式
+         """
+         import uuid
+ 
++        # 如果查询为空，使用默认查询
+         if not query:
+             query = "all memories"
+ 
++        # 构建搜索请求负载
+         payload = {
+             "session": {
+                 "group_id": user_id,
+                 "agent_id": ["memorycare_app"],
+                 "user_id": [user_id],
+-                "session_id": str(uuid.uuid4()),
++                #"session_id": str(uuid.uuid4())
++                "session_id": user_id
+             },
+-            "query": query,
+-            "limit": top_k * 3,
++            "query": query,  # 搜索查询文本
++            "limit": top_k * 3,  # 请求更多结果以便过滤后仍有足够数量
+         }
+ 
+         url = f"{self.base_url}/v1/memories/search"
+-        print(f"[INFO] Retrieving memories for {user_id} ...")
++        print(f"[INFO - retrieve()] Retrieving memories for {user_id} ...")
++        print(f"[INFO - retrieve()] Payload: {json.dumps(payload, indent=4)}")
+ 
+         try:
++            # 发送 POST 请求到搜索端点
+             r = requests.post(url, json=payload, timeout=20)
+             r.raise_for_status()
+             data = r.json()
+ 
+             results = []
+ 
+-            # --- Correct unwrapping for your MemMachine response ---
++            # 处理 MemMachine 的嵌套响应格式
++            # 格式：{"content": {"episodic_memory": [[], [{...}, {...}], [""]]}}
++            # 实际记忆在中间列表中（索引 1）
+             if (
+                 isinstance(data, dict)
+                 and "content" in data
+                 and "episodic_memory" in data["content"]
+             ):
+                 episodic = data["content"]["episodic_memory"]
+-                # episodic is [[], [ {...}, {...} ], [""]]
++                #print(f"[RETRIEVE DEBUG] Episodic: {json.dumps(episodic, indent=4)}")
++
++                # episodic 是 [[], [{...}, {...}], [""]] 格式
+                 if isinstance(episodic, list) and len(episodic) > 1:
+-                    middle = episodic[1]
+-                    if isinstance(middle, list):
+-                        results = middle
++                    # 同时获取 episodic[0] 和 episodic[1] 的内容，合并到同一个列表中
++                    results = []
++                    if isinstance(episodic[0], list):
++                        results.extend(episodic[0])
++                    if len(episodic) > 1 and isinstance(episodic[1], list):
++                        results.extend(episodic[1])
++                    print(f"[RETRIEVE DEBUG] Combined results from episodic[0] and episodic[1]: {json.dumps(results, indent=4)}")
+ 
+-            # fallback: if it's already a list of dicts
++            # 回退处理：如果响应已经是字典列表格式
+             elif isinstance(data, list):
+                 results = data
++                print(f"[RETRIEVE DEBUG] Data: {data}")
++            # 回退处理：如果响应包含 "results" 键
+             elif isinstance(data, dict) and "results" in data:
+                 results = data["results"]
++                print(f"[RETRIEVE DEBUG] Results: {results}")
+             else:
++                # 无法识别的响应格式
+                 print("[WARN] Unrecognized episodic response shape:", data)
+                 return []
++            
++            # 过滤记忆：只返回属于当前用户的记忆
+             filtered = []
+             for mem in results:
+                 if isinstance(mem, dict):
+-                # Debug: print what we're looking at
++                    # 调试信息：打印记忆内容预览
+                     content_preview = mem.get("content", "")[:50]
++                    # 获取用户元数据
+                     metadata = mem.get("user_metadata", {})
++                    # 获取存储时的实际用户 ID
+                     stored_user = metadata.get("actual_user_id")
+                     
++                    # 调试输出（开发时使用）
+                     print(f"[RETRIEVE DEBUG] Content: '{content_preview}...'")
+-                    print(f"[RETRIEVE DEBUG]   Metadata: {metadata}")
+-                    print(f"[RETRIEVE DEBUG]   Stored user: {stored_user}")
+-                    print(f"[RETRIEVE DEBUG]   Requested user: {user_id}")
+-                    print(f"[RETRIEVE DEBUG]   Match: {stored_user == user_id}")
++                    #print(f"[RETRIEVE DEBUG]   Metadata: {metadata}")
++                    #print(f"[RETRIEVE DEBUG]   Stored user: {stored_user}")
++                    #print(f"[RETRIEVE DEBUG]   Requested user: {user_id}")
++                    #print(f"[RETRIEVE DEBUG]   Match: {stored_user == user_id}")
+                     
++                    # 只包含属于当前用户的记忆
+                     if stored_user == user_id:
+                         filtered.append(mem)
+                         print(f"[RETRIEVE DEBUG]   ✓ INCLUDED")
+                     else:
++                        # 过滤掉其他用户的记忆
+                         print(f"[RETRIEVE DEBUG]   ✗ FILTERED OUT")
+         
+             print(f"[RETRIEVE] After filtering: {len(filtered)} memories for {user_id}")
+             
++            # 返回前 top_k 条记忆
+             return filtered[:top_k]
+ 
+         except Exception as e:
++            # 捕获异常并返回空列表
+             print("[ERROR] Retrieval exception:", e)
+             return []
++    
+     def retrieve_profile(self, user_id: str, category: Optional[str] = None) -> List[Dict[str, Any]]:
+-        """Get user's profile memories (permanent facts)."""
++        """
++        检索用户的档案记忆（永久性信息）
++        
++        参数:
++            user_id: 用户唯一标识符
++            category: 可选，记忆分类过滤，如 "personal"、"medical"
++                     如果为 None，返回所有档案记忆
++            
++        返回:
++            List[Dict[str, Any]]: 档案记忆对象列表
++                                 每个对象包含键值对信息和元数据
++                                 如果检索失败，返回空列表
++        """
++        # 构建档案记忆搜索请求负载
+         payload = {
+             "session": {
+-                "group_id": "memorycare_group",
++                "group_id": "memorycare_group",  # 使用固定的组 ID
+                 "agent_id": ["memorycare_app"],
+                 "user_id": [user_id],
+-                "session_id": str(uuid.uuid4())
++                #"session_id": str(uuid.uuid4())
++                "session_id": user_id
+             },
+-            "query": "profile information",
++            "query": "profile information",  # 搜索查询
+             "filter": {
+-                "produced_for_id": user_id,
+-                "additionalProp1": {}
++                "produced_for_id": user_id,  # 过滤条件：只返回该用户的记忆
++                "additionalProp1": {}  # 额外的过滤属性（占位符）
+             },
+-            "limit": 50
++            "limit": 50  # 最多返回 50 条档案记忆
+         }
+         
+         url = f"{self.base_url}/v1/memories/profile/search"
++        print(f"[INFO - retrieve_profile()] Retrieving profile memories for {user_id} ...")
++        print(f"[INFO - retrieve_profile()] Payload: {json.dumps(payload, indent=4)}")
++        
+         try:
++            # 发送 POST 请求到档案记忆搜索端点
+             r = requests.post(url, json=payload, timeout=20)
+             r.raise_for_status()
+             data = r.json()
+             
+-            # Handle various response formats similar to episodic
++            # 处理多种可能的响应格式（类似情景记忆的处理）
++            # 格式 1：嵌套格式 {"content": {"profile_memory": [[], [{...}], [""]]}}
+             if isinstance(data, dict) and "content" in data:
+                 if "profile_memory" in data["content"]:
+                     pm = data["content"]["profile_memory"]
++                    print(f"[RETRIEVE DEBUG] Profile: {json.dumps(pm, indent=4)}")
++
++                    # 如果是嵌套列表格式，提取中间列表
+                     if isinstance(pm, list) and len(pm) > 1 and isinstance(pm[1], list):
++                        # 过滤：只返回属于当前用户的记忆
+                         return [m for m in pm[1] if isinstance(m, dict) and m.get("produced_for_id") == user_id]
+                     elif isinstance(pm, list):
++                        # 如果已经是列表格式，直接过滤
+                         return [m for m in pm if isinstance(m, dict)]
+             
++            # 格式 2：包含 "results" 键
+             if isinstance(data, dict) and "results" in data:
+                 return [m for m in data["results"] if m.get("produced_for_id") == user_id]
+             
++            # 格式 3：直接是列表格式
+             if isinstance(data, list):
+                 return [m for m in data if isinstance(m, dict) and m.get("produced_for_id") == user_id]
+             
++            # 无法识别的响应格式
+             print("[WARN] Unrecognized profile response:", data)
+             return []
+         except Exception as e:
++            # 捕获异常并返回空列表
+             print("[ERROR] profile retrieval exception:", e)
+             return []
++    
+     def store_dual_memory(self, user_id: str, episodic_text: str, profile_data: Optional[Dict[str, Any]] = None, tags: Optional[List[str]] = None):
+         """
+-        Store information in both episodic and profile memory.
++        同时存储情景记忆和档案记忆
+         
+-        Args:
+-            user_id: User identifier
+-            episodic_text: Text for episodic memory (events, conversations)
+-            profile_data: Dictionary of profile facts {key: value, category: str}
+-            tags: Tags for episodic memory
++        这是一个便捷方法，用于在一次操作中同时存储两种类型的记忆。
++        例如：用户注册时，既需要记录注册事件（情景记忆），
++        也需要存储个人信息（档案记忆）。
++        
++        参数:
++            user_id: 用户唯一标识符
++            episodic_text: 情景记忆的文本内容（事件、对话等）
++            profile_data: 可选，档案记忆的字典数据
++                         格式：{"key1": "value1", "key2": "value2", "category": "personal"}
++                         注意：字典中的 "category" 键会被用作所有档案记忆的分类
++            tags: 可选，情景记忆的标签列表
++            
++        使用示例:
++            mm.store_dual_memory(
++                user_id="alice",
++                episodic_text="Alice signed up on 2024-01-01",
++                profile_data={
++                    "full_name": "Alice Smith",
++                    "hobbies": "reading, hiking",
++                    "category": "personal"
++                },
++                tags=["signup", "profile_creation"]
++            )
+         """
+-        # Store episodic memory
++        # 步骤 1：存储情景记忆（事件记录）
++        print(f"[INFO - store_dual_memory()] Storing dual memory for {user_id} ...")
++        print(f"[INFO - store_dual_memory()] Episodic text: {episodic_text}")
++        print(f"[INFO - store_dual_memory()] Profile data: {json.dumps(profile_data, indent=4)}")
++        print(f"[INFO - store_dual_memory()] Tags: {tags}")
+         self.remember(user_id=user_id, text=episodic_text, tags=tags)
+         
+-        # Store profile memory if provided
++        # 步骤 2：如果提供了档案数据，存储档案记忆
+         if profile_data:
++            # 遍历字典中的每个键值对
+             for key, value in profile_data.items():
+-                if key != "category" and value:  # Skip category key and empty values
++                # 跳过 "category" 键（它用于设置分类，不是要存储的数据）
++                # 跳过空值
++                if key != "category" and value:
++                    # 获取分类，如果没有则使用默认值 "personal"
+                     category = profile_data.get("category", "personal")
++                    # 存储档案记忆
+                     self.remember_profile(
+                         user_id=user_id,
+                         key=key,
+-                        value=str(value),
++                        value=str(value),  # 确保值为字符串
+                         category=category
+-                    )
+\ No newline at end of file
++                    )
+diff --git a/utils/models.py b/utils/models.py
+index 5d4d7cb..70ebd4e 100644
+--- a/utils/models.py
++++ b/utils/models.py
+@@ -1,45 +1,178 @@
+ # memorycare_app/utils/models.py
++"""
++数据库模型定义模块
++
++本模块使用 SQLModel 定义数据库表结构，包含以下四个核心模型：
++1. Patient（患者）：存储患者的基本信息和账户信息
++2. Medication（药物）：存储患者需要服用的药物信息
++3. MedicationLog（药物记录）：记录患者每次服药的情况
++4. Goal（目标）：存储医生为患者设定的治疗目标
++
++数据库关系说明：
++- Patient（患者）与 Medication（药物）：一对多关系（一个患者可以有多个药物）
++- Patient（患者）与 Goal（目标）：一对多关系（一个患者可以有多个目标）
++- Medication（药物）与 MedicationLog（药物记录）：一对多关系（一个药物可以有多次服药记录）
++
++使用 SQLModel 的好处：
++- 同时支持 ORM（对象关系映射）和 Pydantic 验证
++- 类型安全，支持 IDE 自动补全
++- 自动生成数据库表结构
++"""
++
+ from typing import Optional, List
+ from datetime import datetime
+ from sqlmodel import SQLModel, Field, Relationship
+ 
+ 
+ class Patient(SQLModel, table=True):
++    """
++    患者模型（Patient）
++    
++    这是系统的核心用户模型，存储所有患者的基本信息。
++    每个患者可以有多个药物（Medication）和多个目标（Goal）。
++    
++    数据库表名：patient
++    """
++    
++    # 主键：患者 ID，自动递增，创建新患者时由数据库自动分配
+     id: Optional[int] = Field(default=None, primary_key=True)
++    
++    # 用户名：用于登录的唯一标识符
++    # index=True 表示在数据库中对该字段创建索引，提高查询速度
++    # unique=True 表示该字段值必须唯一，不能有重复的用户名
+     username: str = Field(index=True, unique=True)
++    
++    # 密码：患者登录密码（注意：实际应用中应该存储哈希值，而不是明文）
+     password: str
++    
++    # 全名：患者的真实姓名，用于显示和识别
+     full_name: str
++    
++    # 家庭信息：可选字段，存储患者的家庭背景、家庭成员等信息
++    # 用于 AI 助手更好地了解患者的生活环境
+     family_info: Optional[str] = None
++    
++    # 紧急联系人姓名：可选字段，用于紧急情况下的联系
+     emergency_contact_name: Optional[str] = None
++    
++    # 紧急联系人电话：可选字段，与紧急联系人姓名配套使用
+     emergency_contact_phone: Optional[str] = None
+-    hobbies: Optional[str] = None  # NEW FIELD
++    
++    # 兴趣爱好：可选字段，存储患者的兴趣爱好
++    # 用于 AI 助手与患者进行更个性化的对话，建立更好的关系
++    hobbies: Optional[str] = None
+ 
++    # 关系字段：一个患者可以有多个药物
++    # Relationship 定义 ORM 关系，back_populates="patient" 表示在 Medication 模型中也有对应的 patient 关系
++    # 使用字符串 "Medication" 是因为此时 Medication 类还未定义，避免前向引用问题
+     medications: List["Medication"] = Relationship(back_populates="patient")
++    
++    # 关系字段：一个患者可以有多个目标
++    # 同样使用字符串 "Goal" 避免前向引用问题
+     goals: List["Goal"] = Relationship(back_populates="patient")
+ 
+ 
+ class Medication(SQLModel, table=True):
++    """
++    药物模型（Medication）
++    
++    存储患者需要服用的药物信息，包括药物名称、服用频率、具体时间等。
++    每个药物属于一个患者，可以有多个服药记录（MedicationLog）。
++    
++    数据库表名：medication
++    """
++    
++    # 主键：药物 ID，自动递增
+     id: Optional[int] = Field(default=None, primary_key=True)
++    
++    # 外键：患者 ID，关联到 Patient 表的 id 字段
++    # foreign_key="patient.id" 指定外键关系
++    # index=True 创建索引，因为经常需要通过 patient_id 查询某个患者的所有药物
+     patient_id: int = Field(foreign_key="patient.id", index=True)
++    
++    # 药物名称：例如 "阿司匹林"、"维生素 D" 等
+     name: str
++    
++    # 每天服用次数：默认为 1 次，表示该药物每天需要服用几次
++    # 例如：3 表示每天 3 次
+     times_per_day: int = 1
++    
++    # 具体服用时间：可选字段，存储具体的服用时间点
++    # 格式通常是逗号分隔的时间字符串，例如 "09:00,14:00,20:00"
++    # 如果为空，则按照 times_per_day 均匀分配时间
+     specific_times: Optional[str] = None
++    
++    # 服用说明：可选字段，存储药物的服用说明
++    # 例如："饭后服用"、"用水送服"、"避免与牛奶同服" 等
+     instructions: Optional[str] = None
++    
++    # 是否激活：布尔值，表示该药物是否还在使用中
++    # True 表示患者当前正在服用此药物
++    # False 表示该药物已停用（例如疗程结束或医生要求停药）
+     active: bool = True
+-    start_date: datetime = Field(default_factory=datetime.now)  # NEW
+-    end_date: Optional[datetime] = None  # NEW - when to stop
++    
++    # 开始日期：药物开始服用的日期和时间
++    # default_factory=datetime.now 表示创建记录时自动设置为当前时间
++    start_date: datetime = Field(default_factory=datetime.now)
++    
++    # 结束日期：可选字段，药物停止服用的日期和时间
++    # 如果为 None，表示该药物仍在服用中
++    # 当医生停用药物时，会设置此字段
++    end_date: Optional[datetime] = None
++    
++    # 创建时间：记录创建该药物记录的时间
++    # 用于追踪药物信息何时被添加到系统中
+     created_at: datetime = Field(default_factory=datetime.now)
+     
++    # 关系字段：反向关联到所属的患者
++    # back_populates="medications" 与 Patient 模型中的 medications 字段对应
+     patient: Patient = Relationship(back_populates="medications")
++    
++    # 关系字段：一个药物可以有多个服药记录
++    # 每次患者服药时，都会创建一条 MedicationLog 记录
+     logs: List["MedicationLog"] = Relationship(back_populates="medication")
+ 
+ class MedicationLog(SQLModel, table=True):
++    """
++    药物记录模型（MedicationLog）
++    
++    记录患者每次服药的情况，包括是否服用、服用时间等。
++    每条记录关联到一个具体的药物（Medication）。
++    
++    数据库表名：medicationlog
++    
++    用途：
++    - 追踪患者的服药依从性（是否按时服药）
++    - 生成服药历史报告
++    - 帮助医生评估治疗效果
++    """
++    
++    # 主键：记录 ID，自动递增
+     id: Optional[int] = Field(default=None, primary_key=True)
++    
++    # 外键：药物 ID，关联到 Medication 表的 id 字段
++    # index=True 创建索引，因为经常需要通过 medication_id 查询某个药物的所有记录
+     medication_id: int = Field(foreign_key="medication.id", index=True)
++    
++    # 日期：记录该服药记录的日期和时间
++    # default_factory=datetime.now 表示创建记录时自动设置为当前时间
++    # 通常用于记录"应该在什么时候服药"或"实际什么时候服药的"
+     date: datetime = Field(default_factory=datetime.now)
++    
++    # 实际服用时间：可选字段，存储患者实际服用药物的时间
++    # 格式通常是 "HH:MM"，例如 "09:15"、"14:30" 等
++    # 如果患者按时服药，此字段可能与 date 中的时间一致
++    # 如果患者忘记服药或延迟服药，此字段会记录实际时间
+     time_taken: Optional[str] = None
++    
++    # 是否已服用：布尔值，表示患者是否实际服用了药物
++    # True 表示已服用，False 表示未服用（忘记或拒绝）
++    # 这是最重要的字段，用于判断患者的服药依从性
+     taken: bool = False
+ 
++    # 关系字段：反向关联到所属的药物
++    # Optional 表示在某些查询场景下可能不需要加载关联的药物对象
++    # back_populates="logs" 与 Medication 模型中的 logs 字段对应
+     medication: Optional["Medication"] = Relationship(back_populates="logs")
+ 
+ 
+@@ -48,11 +181,48 @@ class MedicationLog(SQLModel, table=True):
+ 
+ 
+ class Goal(SQLModel, table=True):
++    """
++    目标模型（Goal）
++    
++    存储医生为患者设定的治疗目标或康复目标。
++    例如："每天散步 30 分钟"、"完成记忆训练游戏" 等。
++    每个目标属于一个患者，可以标记为已完成。
++    
++    数据库表名：goal
++    
++    用途：
++    - 帮助患者设定和追踪治疗目标
++    - 评估患者的康复进度
++    - AI 助手可以根据目标提供个性化的提醒和鼓励
++    """
++    
++    # 主键：目标 ID，自动递增
+     id: Optional[int] = Field(default=None, primary_key=True)
++    
++    # 外键：患者 ID，关联到 Patient 表的 id 字段
++    # index=True 创建索引，因为经常需要通过 patient_id 查询某个患者的所有目标
+     patient_id: int = Field(foreign_key="patient.id", index=True)
++    
++    # 目标文本：目标的描述内容
++    # 例如："晚饭后散步 10 分钟"、"完成今天的记忆训练"、"按时服用所有药物"
+     text: str
++    
++    # 是否已完成：布尔值，表示该目标是否已经完成
++    # False 表示目标还在进行中（活跃目标）
++    # True 表示目标已经完成
+     completed: bool = False
++    
++    # 创建时间：目标被创建的时间
++    # default_factory=datetime.now 表示创建记录时自动设置为当前时间
++    # 用于追踪目标何时被分配给患者
+     created_at: datetime = Field(default_factory=datetime.now)
++    
++    # 完成时间：可选字段，目标完成的时间
++    # 如果为 None，表示目标尚未完成
++    # 当目标被标记为完成时，会设置此字段为当前时间
++    # 用于分析患者完成目标所需的时间，评估康复进度
+     completed_at: Optional[datetime] = None
+ 
++    # 关系字段：反向关联到所属的患者
++    # back_populates="goals" 与 Patient 模型中的 goals 字段对应
+     patient: Patient = Relationship(back_populates="goals")
+diff --git a/utils/scheduler.py b/utils/scheduler.py
+index fb91187..497b074 100644
+--- a/utils/scheduler.py
++++ b/utils/scheduler.py
+@@ -1,41 +1,133 @@
+ # memorycare_app/utils/scheduler.py
++"""
++药物提醒调度器模块
++
++本模块负责计算药物的下次服用时间，判断当前是否在服药时间窗口内。
++支持两种模式：指定具体时间和自动平均分配。
++"""
++
+ from __future__ import annotations
+ from datetime import datetime, time
+ from typing import List, Optional
+ 
++
+ def _parse_specific_times(csv_times: Optional[str]) -> List[time]:
++    """
++    解析逗号分隔的时间字符串为 time 对象列表
++    
++    参数:
++        csv_times: 逗号分隔的时间字符串，如 "09:00,14:00,20:00"
++        
++    返回:
++        List[time]: time 对象列表，如 [time(9, 0), time(14, 0), time(20, 0)]
++        
++    示例:
++        _parse_specific_times("09:00,14:00,20:00")
++        # 返回 [time(9, 0), time(14, 0), time(20, 0)]
++        
++    注意:
++        - 无效的时间格式会被忽略（不抛出异常）
++        - 空字符串或 None 返回空列表
++    """
++    # 如果输入为空，直接返回空列表
+     if not csv_times:
+         return []
++    
+     out = []
++    # 按逗号分割时间字符串
+     for t in csv_times.split(","):
+-        t = t.strip()
++        t = t.strip()  # 去除前后空格
+         try:
++            # 按冒号分割小时和分钟
+             hh, mm = t.split(":")
++            # 转换为 time 对象并添加到列表
+             out.append(time(int(hh), int(mm)))
+         except:
++            # 如果解析失败（格式错误），跳过该时间
+             pass
+     return out
+ 
++
+ def next_due_window(now: datetime, times_per_day: int, specific_times: Optional[str]) -> Optional[str]:
+-    """Return a friendly message if a dose is due now/soon (+/- 5 min)."""
++    """
++    判断当前是否在药物服用时间窗口内（±5 分钟）
++    
++    参数:
++        now: 当前日期时间对象
++        times_per_day: 每天需要服用的次数
++        specific_times: 可选，逗号分隔的具体时间字符串，如 "09:00,14:00,20:00"
++                      如果为 None，系统会根据 times_per_day 自动平均分配时间
++        
++    返回:
++        Optional[str]: 如果在时间窗口内，返回友好的提醒消息字符串
++                      如果不在时间窗口内，返回 None
++        
++    时间窗口:
++        - 窗口大小：±5 分钟
++        - 例如：如果设定时间为 09:00，则在 08:55-09:05 之间会返回提醒
++        
++    工作流程:
++        1. 如果指定了具体时间，检查当前时间是否接近任何一个指定时间
++        2. 如果未指定具体时间，将一天平均分成 times_per_day 个时间段
++        3. 检查当前时间是否接近任何一个时间段
++        4. 如果在窗口内，返回提醒消息；否则返回 None
++        
++    示例:
++        # 指定时间模式
++        next_due_window(datetime(2024, 1, 1, 9, 2), 3, "09:00,14:00,20:00")
++        # 返回 "Medication time window right now (~09:00)."
++        
++        # 自动分配模式
++        next_due_window(datetime(2024, 1, 1, 8, 0), 3, None)
++        # 可能返回 "Medication time window right now (~08:00)."
++    """
++    # 如果每天服用次数小于等于 0，无需提醒
+     if times_per_day <= 0:
+         return None
++    
++    # 时间窗口大小：5 分钟（±5 分钟）
+     window = 5  # minutes
+ 
++    # 模式 1：如果指定了具体服用时间
+     if specific_times:
++        # 解析时间字符串为 time 对象列表
+         for tt in _parse_specific_times(specific_times):
++            # 将当前日期与指定时间组合，创建目标时间点
++            # replace 方法将当前时间的小时、分钟、秒、微秒替换为指定值
+             dose_dt = now.replace(hour=tt.hour, minute=tt.minute, second=0, microsecond=0)
++            
++            # 计算当前时间与目标时间的差值（以分钟为单位）
+             delta = abs((dose_dt - now).total_seconds()) / 60
++            
++            # 如果差值在时间窗口内（≤5 分钟），返回提醒消息
+             if delta <= window:
+                 return f"Medication time window right now (~{tt.strftime('%H:%M')})."
+     else:
+-        # equal spacing across day
++        # 模式 2：未指定具体时间，自动平均分配
++        
++        # 计算每个时间段之间的分钟间隔
++        # 例如：3 次/天 = 每 8 小时一次 = 480 分钟
+         minutes_per = int(24 * 60 / times_per_day)
++        
++        # 生成所有时间段的起始分钟数（从 0 点开始）
++        # 例如：3 次/天 = [0, 480, 960] 分钟
+         slots = [minutes_per * i for i in range(times_per_day)]
++        
++        # 将当前时间转换为从 0 点开始的分钟数
++        # 例如：08:30 = 8*60 + 30 = 510 分钟
+         now_min = now.hour * 60 + now.minute
++        
++        # 检查当前时间是否接近任何一个时间段
+         for sm in slots:
++            # 计算当前时间与时间段起始时间的差值（分钟）
+             delta = abs(sm - now_min)
++            
++            # 如果差值在时间窗口内（≤5 分钟）
+             if delta <= window:
++                # 将分钟数转换回小时和分钟
+                 hh, mm = divmod(sm, 60)
++                # 返回提醒消息
+                 return f"Medication time window right now (~{hh:02d}:{mm:02d})."
++    
++    # 不在任何时间窗口内，返回 None
+     return None
