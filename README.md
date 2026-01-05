@@ -32,14 +32,14 @@ OPENAI_MODEL=[LLM MODEL]
 MEMMACHINE_BASE_URL=http://localhost:8080
 ```
 
-```bash
 # 1. 配置环境变量（创建 .env 文件）
 参考上面的例子，创建一个 .env 文件，配置好环境变量。
 
-# 2. 启动 MemMachine 服务
+# 2. 安装 MemMachine
 参考安装步骤 - https://ai.feishu.cn/wiki/DbdNwIFmdieADrkuge8cBZe1nXb?from=from_copylink
 
 # 3. 一键启动所有服务
+```bash
 chmod +x docker-compose.sh
 ./docker-compose.sh
 ```
