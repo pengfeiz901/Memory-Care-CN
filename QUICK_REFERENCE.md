@@ -228,6 +228,21 @@ SELECT * FROM patient;
    sudo docker compose up -d
    ```
 
+## 🌐 网络连接问题解决 (macOS)
+
+### 在 macOS 上部署时遇到 MemMachine 连接超时错误
+
+**问题原因**: Docker 容器在 Linux 和 macOS 上访问宿主机服务的方式不同。
+
+**解决方案**:
+1. 在 `docker-compose.yml` 中修改网络配置：
+   ```yaml
+   environment:
+     - MEMMACHINE_BASE_URL=http://host.docker.internal:8080  # macOS 使用 host.docker.internal
+   extra_hosts:
+     - "host.docker.internal:host-gateway"  # macOS 使用 host-gateway
+   ```
+
 ---
 
 ## 📍 关键位置速查

@@ -9,9 +9,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MEMMACHINE_BASE_URL=http://172.17.0.1:8080
+      - MEMMACHINE_BASE_URL=http://host.docker.internal:8080
     extra_hosts:
-      - "host.docker.internal:172.17.0.1"
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data  # 挂载整个数据目录而不是单个文件
       - ./.env:/app/.env
