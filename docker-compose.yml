@@ -1,0 +1,42 @@
+services:
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: memorycare-backend
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - MEMMACHINE_BASE_URL=http://172.17.0.1:8080
+    extra_hosts:
+      - "host.docker.internal:172.17.0.1"
+    volumes:
+      - ./app.db:/app/app.db
+      - ./.env:/app/.env
+    restart: always
+    networks:
+      - memorycare-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: memorycare-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./.env:/app/.env
+    restart: always
+    networks:
+      - memorycare-network
+
+networks:
+  memorycare-network:
+    driver: bridge
