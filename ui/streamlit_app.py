@@ -18,8 +18,9 @@ import streamlit as st
 from datetime import datetime
 
 # 后端 API 服务器地址
-# 注意：如果后端运行在不同端口，需要修改此地址
-API = "http://127.0.0.1:8001"
+# 从环境变量获取，默认为 http://127.0.0.1:8000
+import os
+API = os.getenv("API", "http://127.0.0.1:8000")
 
 # 中文日期格式化函数
 def format_chinese_date(dt: datetime) -> str:

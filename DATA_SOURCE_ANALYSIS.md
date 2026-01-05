@@ -53,7 +53,7 @@
 | | 记录服药事件 | MemMachine | 存储服药事件到情景记忆 | 1223-1227 |
 | **POST /remember** | 手动存储记忆 | MemMachine | 直接调用 `mm.remember()` 存储情景记忆 | 1279 |
 | **POST /chat** | 检索情景记忆 | MemMachine | 调用 `mm.retrieve()` 检索相关对话和事件记忆 | 1321, 1326 |
-| | 检索档案记忆 | MemMachine | 调用 `mm.retrieve_profile()` 检索用户档案信息 | 1330 |
+| | 检索语义记忆 | MemMachine | 调用 `mm.retrieve_semantic()` 检索用户语义信息 | 1330 |
 | | 查询患者信息 | SQL 数据库 | 根据用户名查询 `Patient` 表 | 1340 |
 | | 检查并重置过期药物 | SQL 数据库 | 调用 `check_and_reset_medications` 函数 | 1343 |
 | | 获取激活药物 | SQL 数据库 | 查询 `Medication` 表获取 `active=True` 的药物 | 1347 |
@@ -177,5 +177,100 @@
 - **MemMachine**：负责语义化记忆的存储和检索（用于 AI 对话上下文）
 - **混合使用**：在 `/chat` 端点中，两者结合使用，提供完整的个性化对话体验
 
+---
 
+## 🐳 Docker 部署注意事项
 
+当使用 Docker 部署时，需要注意以下几点：
+
+### 环境变量配置
+
+在 Docker 环境中，环境变量通过 `.env` 文件挂载到容器中：
+
+- `OPENAI_API_KEY` - 通过环境变量注入到后端容器
+- `OPENAI_MODEL` - 通过环境变量注入到后端容器
+- `MEMMACHINE_BASE_URL` - 后端容器中配置 MemMachine 服务地址
+
+### 服务依赖关系
+
+MemoryCare 依赖外部的 MemMachine 服务来存储和检索记忆：
+
+- **MemMachine 服务**：必须在 MemoryCare 之前启动
+- **启动顺序**：先启动 MemMachine → 再启动 MemoryCare Docker 容器
+- **连接地址**：Docker 容器通过 `http://172.17.0.1:8080` 访问宿主机上的 MemMachine 服务
+
+#### 安装和启动 MemMachine 服务
+
+MemMachine 服务需要单独安装和启动：
+
+1. **克隆或访问 MemMachine 仓库**
+   ```bash
+   cd /memverge/MeetUp/MemMachine-MemMachine-dab4fdf
+   ```
+
+2. **配置环境变量**
+   ```bash
+   # 复制示例环境文件
+   cp sample_configs/env.dockercompose .env
+   
+   # 编辑 .env 文件，添加你的 OpenAI API 密钥
+   # OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+3. **配置 MemMachine 服务**
+   ```bash
+   # 复制示例配置文件
+   cp sample_configs/episodic_memory_config.sample configuration.yml
+   
+   # 编辑 configuration.yml 文件，更新以下内容：
+   # - 替换 <YOUR_API_KEY> 为你的 OpenAI API 密钥
+   # - 替换 <YOUR_PASSWORD_HERE> 为你的 Neo4j 密码
+   # - 确保 host 设置为 'postgres' 和 'neo4j'（Docker 网络中的服务名）
+   ```
+
+4. **启动 MemMachine 服务**
+   ```bash
+   # 使用启动脚本（推荐）
+   ./memmachine-compose.sh
+   
+   # 或者直接使用 docker-compose
+   docker-compose up -d
+   ```
+
+5. **验证 MemMachine 服务运行状态**
+   ```bash
+   curl http://localhost:8080/health
+   ```
+
+### 服务间通信
+
+在 Docker Compose 环境中：
+
+- **后端服务**（backend）：运行在 `http://localhost:8000`
+- **前端服务**（frontend）：运行在 `http://localhost:8501`
+- **MemMachine 服务**：需要单独启动，后端通过 `http://172.17.0.1:8080` 访问
+
+### 数据持久化
+
+- `app.db` 数据库文件通过 Docker 卷挂载到宿主机
+- `.env` 配置文件通过 Docker 卷挂载到容器中
+
+### 端口映射
+
+- 容器内后端端口：8000 → 宿主机端口：8000
+- 容器内前端端口：8501 → 宿主机端口：8501
+
+### 启动脚本
+
+使用 `docker-compose.sh` 脚本可以一键启动所有服务：
+
+```bash
+# 1. 确保 MemMachine 服务正在运行
+curl http://localhost:8080/health
+
+# 2. 给启动脚本添加执行权限
+chmod +x docker-compose.sh
+
+# 3. 启动所有服务
+./docker-compose.sh
+```

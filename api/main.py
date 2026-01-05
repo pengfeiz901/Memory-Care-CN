@@ -536,23 +536,32 @@ def patient_signup(payload: PatientSignup):
         profile_data["emergency_contact_name"] = payload.emergency_contact_name
     if payload.emergency_contact_phone:
         profile_data["emergency_contact_phone"] = payload.emergency_contact_phone
-        # 存储合并的紧急联系人信息到档案记忆
+        # 存储合并的紧急联系人信息到语义记忆（使用types=["semantic"]）
         # 格式："{姓名} - Phone: {电话}"
-        mm.remember_profile(
+        mm.remember(
             user_id=payload.username,  # 用户 ID
-            key="emergency_contact",  # 记忆键名
-            value=f"{payload.emergency_contact_name or 'Unknown'} - Phone: {payload.emergency_contact_phone}",  # 合并的值
-            category="emergency_info"  # 分类为紧急信息
+            text=f"emergency_contact: {payload.emergency_contact_name or 'Unknown'} - Phone: {payload.emergency_contact_phone}",  # 格式：key: value
+            tags=["emergency_info", "signup", "profile_creation"],  # 标签，用于记忆分类和检索
+            types=["semantic"]  # 只存储为语义记忆
         )
     
-    # 步骤 6: 同时存储情景记忆和档案记忆
-    # store_dual_memory 会同时调用 remember() 和 remember_profile()
-    mm.store_dual_memory(
+    # 步骤 6: 存储情景记忆（使用types=["episodic"]）
+    mm.remember(
         user_id=payload.username,  # 用户 ID
-        episodic_text=episodic_text,  # 情景记忆文本
-        profile_data=profile_data,  # 档案记忆数据
-        tags=["signup", "profile_creation"]  # 标签，用于记忆分类和检索
+        text=episodic_text,  # 情景记忆文本
+        tags=["signup", "profile_creation"],  # 标签，用于记忆分类和检索
+        types=["episodic"]  # 只存储为情景记忆
     )
+    
+    # 步骤 7: 存储档案数据为语义记忆
+    for key, value in profile_data.items():
+        if key and value:
+            mm.remember(
+                user_id=payload.username,  # 用户 ID
+                text=f"{key}: {value}",  # 格式：key: value
+                tags=["signup", "profile_creation"],  # 标签，用于记忆分类和检索
+                types=["semantic"]  # 只存储为语义记忆
+            )
     
     # 步骤 7: 返回成功响应，包含 Token 和角色信息
     return {"ok": True, "token": token, "role": "patient"}
@@ -771,15 +780,21 @@ def add_med(payload: MedicationIn, token: str = Query(...), duration_days: int =
         s.add(med)
         s.commit()
     episodic_text = f"Doctor added new medication '{payload.name}' on {datetime.now().strftime('%Y-%m-%d')}."
-    profile_data = {
-        f"medication_{payload.name.lower().replace(' ', '_')}": f"{payload.name} - {payload.times_per_day}x daily at {payload.specific_times}",
-        "category": "medical_info"
-    }
-    mm.store_dual_memory(
+    
+    # 存储情景记忆
+    mm.remember(
         user_id=payload.patient_username,
-        episodic_text=episodic_text,
-        profile_data=profile_data,
-        tags=["medication", "doctor_action"]
+        text=episodic_text,
+        tags=["medication", "doctor_action"],
+        types=["episodic"]
+    )
+    
+    # 存储药物信息为语义记忆
+    mm.remember(
+        user_id=payload.patient_username,
+        text=f"medication_{payload.name.lower().replace(' ', '_')}: {payload.name} - {payload.times_per_day}x daily at {payload.specific_times}",
+        tags=["medication", "doctor_action", "medical_info"],
+        types=["semantic"]
     )
     return {"ok": True, "message": "Medication added"}
 
@@ -1021,17 +1036,20 @@ def add_goal(payload: GoalIn, patient_username: str = Query(...), token: str = Q
     # EPISODIC MEMORY: Record goal assignment
     episodic_text = f"Doctor assigned new goal on {datetime.now().strftime('%Y-%m-%d')}: {payload.text}"
     
-    # PROFILE MEMORY: Store as active goal
-    profile_data = {
-        f"active_goal_{datetime.now().strftime('%Y%m%d_%H%M%S')}": payload.text,
-        "category": "goals"
-    }
-    
-    mm.store_dual_memory(
+    # 存储情景记忆
+    mm.remember(
         user_id=patient_username,
-        episodic_text=episodic_text,
-        profile_data=profile_data,
-        tags=["goal", "doctor_action"]
+        text=episodic_text,
+        tags=["goal", "doctor_action"],
+        types=["episodic"]
+    )
+    
+    # 存储目标信息为语义记忆
+    mm.remember(
+        user_id=patient_username,
+        text=f"active_goal_{datetime.now().strftime('%Y%m%d_%H%M%S')}: {payload.text}",
+        tags=["goal", "doctor_action", "goals"],
+        types=["semantic"]
     )
     
     return {"ok": True, "message": "Goal assigned"}
@@ -1367,11 +1385,11 @@ def chat_with_memory(req: ChatRequest):
         episodic_memories = mm.retrieve(user_id=user_id, query="all memories", top_k=20)
     
     # 步骤 2: 检索档案记忆（永久性的用户信息，如偏好、家庭成员等）
-    profile_memories = mm.retrieve_profile(user_id=user_id)
+    semantic_memories = mm.retrieve_semantic(user_id=user_id)
 
     # 调试输出：打印检索到的记忆数量，便于排查问题
     print(f"[DEBUG] Episodic memories for user_id: {user_id}, message: {req.message}, is_system_start: {is_system_start}, count: {len(episodic_memories)}")
-    print(f"[DEBUG] Profile memories for user_id: {user_id}, count: {len(profile_memories)}")
+    print(f"[DEBUG] semantic memories for user_id: {user_id}, count: {len(semantic_memories)}")
 
     # 步骤 3: 从数据库获取患者信息和相关数据
     print(f"[DEBUG] Getting patient information and related data for user_id: {user_id}")
@@ -1441,7 +1459,7 @@ def chat_with_memory(req: ChatRequest):
     
     # 步骤 6: 处理档案记忆，提取永久性用户信息
     profile_lines = []  # 存储档案信息文本
-    for p in profile_memories:  # 遍历每条档案记忆
+    for p in semantic_memories:  # 遍历每条档案记忆（使用semantic_memories）
         if isinstance(p, dict):
             # 从字典中提取内容，尝试多个可能的键名
             content = p.get("episode_content", "") or p.get("content", "") or p.get("text", "")
@@ -1650,15 +1668,15 @@ def chat_with_memory(req: ChatRequest):
             
             # 如果有提取到新的档案事实
             if new_profile_facts:
-                # 遍历每个事实，存储到档案记忆
+                # 遍历每个事实，存储为语义记忆
                 for key, value in new_profile_facts.items():
                     # 只存储非空字符串值
                     if value and isinstance(value, str):
-                        mm.remember_profile(
+                        mm.remember(
                             user_id=user_id,  # 用户 ID
-                            key=key,  # 事实键名（如 "favorite_food"）
-                            value=value,  # 事实值（如 "pizza"）
-                            category="learned_preferences"  # 分类为学习到的偏好
+                            text=f"{key}: {value}",  # 格式：key: value
+                            tags=["learned_preferences"],  # 分类为学习到的偏好
+                            types=["semantic"]  # 只存储为语义记忆
                         )
         except Exception as e:
             # 如果提取过程出错，记录错误但不中断对话

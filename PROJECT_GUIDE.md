@@ -174,10 +174,12 @@ Memory-Care/
 **作用**：与 MemMachine 服务通信，存储和检索记忆
 
 **关键函数**：
-- `remember()` - 存储情景记忆
-- `remember_profile()` - 存储档案记忆
+- `remember()` - 存储记忆（通过types参数控制记忆类型）
+  - `types=["episodic"]` - 只存储为情景记忆
+  - `types=["semantic"]` - 只存储为语义记忆
+  - `types=["episodic", "semantic"]` - 同时存储为两种类型
 - `retrieve()` - 检索情景记忆
-- `retrieve_profile()` - 检索档案记忆
+- `retrieve_semantic()` - 检索语义记忆
 
 #### 8. `utils/scheduler.py` - 调度器 ⭐
 
@@ -197,10 +199,12 @@ Memory-Care/
 - **例子**："今天早上吃了早餐"、"昨天和女儿通了电话"
 - **特点**：会随时间积累，用于理解上下文
 
-#### 档案记忆（Profile Memory）
-- **是什么**：永久性的用户信息
+#### 语义记忆（Semantic Memory）
+- **是什么**：永久性的用户信息和知识
 - **例子**："我喜欢散步"、"我的女儿叫 Sarah"、"紧急联系人：John"
 - **特点**：不会改变，用于个性化对话
+- **原档案记忆**：包含了原档案记忆的所有功能，现在统一为语义记忆
+- **存储方式**：通过 `remember()` 函数，设置 `types=["semantic"]` 来存储
 
 ### 2. 数据流向
 
@@ -645,6 +649,148 @@ A: 存储在 MemMachine 服务中，需要 MemMachine 服务运行。
 
 **Q: 如何重置数据库？**
 A: 删除 `app.db` 文件，重启应用。
+
+---
+
+## 🐳 Docker 部署
+        
+项目支持使用 Docker 进行容器化部署，便于在不同环境中运行。
+        
+### Docker 文件说明
+        
+- `Dockerfile` - 后端服务的 Docker 构建文件
+- `Dockerfile.ui` - 前端服务的 Docker 构建文件
+- `docker-compose.yml` - Docker Compose 配置文件
+- `docker-compose.sh` - 一键启动脚本
+        
+### Docker 启动方式
+        
+```bash
+# 1. 确保已配置环境变量（创建 .env 文件）
+        
+# 2. 确保 MemMachine 服务正在运行（重要！）
+#    在启动 Docker 容器之前，必须先启动 MemMachine 服务
+#    MemMachine 服务通常在 http://localhost:8080 运行
+        
+# 3. 给启动脚本添加执行权限
+chmod +x docker-compose.sh
+        
+# 4. 启动所有服务
+./docker-compose.sh
+```
+
+### MemMachine 服务启动
+
+MemoryCare 依赖外部的 MemMachine 服务来存储和检索记忆。在使用 Docker 部署前，必须确保 MemMachine 服务正在运行。
+
+#### 使用 Docker Compose 快速启动 MemMachine
+
+MemMachine 提供了 Docker Compose 配置，可以快速启动完整的 MemMachine 服务：
+
+1. **进入 MemMachine 目录**
+   ```bash
+   cd /memverge/MeetUp/MemMachine-MemMachine-dab4fdf
+   ```
+
+2. **配置环境变量**
+   ```bash
+   # 复制示例环境文件
+   cp sample_configs/env.dockercompose .env
+   
+   # 编辑 .env 文件，添加你的 OpenAI API 密钥
+   # OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+3. **配置 MemMachine 服务**
+   ```bash
+   # 复制示例配置文件
+   cp sample_configs/episodic_memory_config.sample configuration.yml
+   
+   # 编辑 configuration.yml 文件，更新以下内容：
+   # - 替换 <YOUR_API_KEY> 为你的 OpenAI API 密钥
+   # - 替换 <YOUR_PASSWORD_HERE> 为你的 Neo4j 密码
+   # - 确保 host 设置为 'postgres' 和 'neo4j'（Docker 网络中的服务名）
+   ```
+
+4. **启动 MemMachine 服务**
+   ```bash
+   # 使用启动脚本（推荐）
+   ./memmachine-compose.sh
+   
+   # 或者直接使用 docker-compose
+   docker-compose up -d
+   ```
+
+5. **验证 MemMachine 服务运行状态**
+   ```bash
+   curl http://localhost:8080/health
+   ```
+
+#### MemMachine 服务架构
+
+MemMachine 服务包含以下组件：
+- **PostgreSQL**: 存储档案记忆（profile memory）
+- **Neo4j**: 存储情景记忆（episodic memory）
+- **MemMachine 应用**: 提供 API 接口，端口 8080
+
+#### Docker 网络配置
+
+当在 Docker 中运行 MemoryCare 时，需要确保容器能够访问宿主机上的 MemMachine 服务。在 `docker-compose.yml` 中已配置：
+```yaml
+extra_hosts:
+  - "host.docker.internal:172.17.0.1"
+```
+
+这使得 MemoryCare 容器可以通过 `http://host.docker.internal:8080` 访问宿主机上的 MemMachine 服务。
+
+**访问地址：**
+- 前端应用：http://localhost:8501
+- 后端 API：http://localhost:8000
+- API 文档：http://localhost:8000/docs
+
+### Docker 常用命令
+
+```bash
+# 查看服务状态
+docker-compose ps
+
+# 查看服务日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重新构建并启动服务
+docker-compose up --build -d
+
+# 重启单个服务
+docker-compose restart backend
+docker-compose restart frontend
+```
+
+### 常见 Docker 问题
+
+1. **端口冲突**：如果启动失败，检查端口 8000 是否被占用
+   ```bash
+   sudo netstat -tulpn | grep :8000
+   # 如有占用，终止相应进程
+   sudo kill <PID>
+   ```
+
+2. **权限问题**：如果遇到 Docker 权限错误
+   ```bash
+   # 将用户添加到 docker 组
+   sudo groupadd docker 2>/dev/null; sudo usermod -aG docker $USER
+   # 或使用 sudo 运行脚本
+   sudo ./docker-compose.sh
+   ```
+
+3. **Docker Compose 命令不存在**：某些系统使用 `docker compose` 而不是 `docker-compose`
+   ```bash
+   # 检查可用命令
+   docker compose version  # 或
+   docker-compose --version
+   ```
 
 ---
 
