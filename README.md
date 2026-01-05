@@ -1,3 +1,124 @@
+---
+
+## 🔄 启动流程
+
+### 方式一：传统方式启动
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 配置环境变量（创建 .env 文件）
+
+# 3. 启动 MemMachine 服务
+
+# 4. 启动后端（终端 1）
+uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+
+# 5. 启动前端（终端 2）
+streamlit run ui/streamlit_app.py
+```
+
+### 方式二：Docker 方式启动（推荐）
+
+## ⚙️ 环境变量
+
+```bash
+# .env 文件需要配置
+# OpenAI API 配置
+OPENAI_API_KEY=[Your API Key]
+OPENAI_BASE_URL=[LLM BASE URL]
+OPENAI_MODEL=[LLM MODEL]
+
+# MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
+MEMMACHINE_BASE_URL=http://localhost:8080
+```
+
+```bash
+# 1. 配置环境变量（创建 .env 文件）
+
+# 2. 启动 MemMachine 服务
+
+# 3. 一键启动所有服务
+chmod +x docker-compose.sh
+./docker-compose.sh
+```
+
+**访问地址：**
+- 前端应用：http://localhost:8501
+- 后端 API：http://localhost:8000
+- MemMachine API：http://localhost:8080
+- MemMachine API 文档：http://localhost:8080/docs
+
+**Docker 相关命令：**
+```bash
+# 查看服务状态
+docker-compose ps
+
+# 查看服务日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+```
+
+**常见问题解决：**
+- 如果启动失败，检查是否已有服务占用8000端口：
+  ```bash
+  sudo netstat -tulpn | grep :8000
+  # 如有占用，终止相应进程
+  sudo kill <PID>
+  ```
+- 如果遇到 Docker 权限问题：
+  ```bash
+  # 将用户添加到 docker 组
+  sudo groupadd docker 2>/dev/null; sudo usermod -aG docker $USER
+  # 或使用 sudo 运行脚本
+  sudo ./docker-compose.sh
+  ```
+- 如果出现与 MemMachine 服务连接相关的错误：
+  ```bash
+  # 确保 MemMachine 服务正在运行
+  curl http://localhost:8080/health
+  # 如果服务未运行，请先启动 MemMachine 服务
+  # 然后重新启动 MemoryCare Docker 容器
+  ```
+
+- MemMachine 服务安装和启动：
+  ```bash
+  # 1. 进入 MemMachine 目录
+  cd [MemMachine code folder]
+  
+  # 2. 启动 MemMachine 服务
+  ./memmachine-compose.sh  # 推荐使用脚本
+  # 或 docker-compose up -d
+  
+  # 3. 验证服务状态
+  curl http://localhost:8080/api/v2/health
+  ```
+
+---
+
+### ⚡ 快速参考
+**常用代码片段速查**：查看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
+
+包含内容：
+- ✅ 文件速查表
+- ✅ 常用代码片段（复制即用）
+- ✅ 常见修改场景速查
+- ✅ 关键位置索引
+- ✅ 调试命令
+
+**适合人群**：
+- 🎯 零基础开发者：从理解项目到上手修改
+- 🔧 有经验的开发者：快速查找代码位置和示例
+- 📝 代码维护者：快速定位和修改功能
+
+---
+
 # 💙 MemoryCare - AI Companion for Dementia & Alzheimer's Care
 
 > **Dementia care powered by memories that last—because every moment matters**
@@ -95,34 +216,4 @@ Traditional chatbots forget everything between sessions. **MemoryCare doesn't.**
 
 ## Special thanks to the MemVerge team for creating MemMachine and hosting this innovative hackathon.
 
----
 
-## 📚 开发文档
-
-### 📖 详细开发指南
-**零基础用户快速上手指南**：查看 [PROJECT_GUIDE.md](./PROJECT_GUIDE.md)
-
-包含内容：
-- ✅ 项目架构详解（带图表）
-- ✅ 代码结构说明（每个文件的作用）
-- ✅ 核心概念理解（记忆类型、数据流向等）
-- ✅ 如何修改代码的完整教程
-- ✅ 5个常见修改场景的详细示例
-- ✅ 调试技巧和最佳实践
-
-### ⚡ 快速参考
-**常用代码片段速查**：查看 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
-
-包含内容：
-- ✅ 文件速查表
-- ✅ 常用代码片段（复制即用）
-- ✅ 常见修改场景速查
-- ✅ 关键位置索引
-- ✅ 调试命令
-
-**适合人群**：
-- 🎯 零基础开发者：从理解项目到上手修改
-- 🔧 有经验的开发者：快速查找代码位置和示例
-- 📝 代码维护者：快速定位和修改功能
-
----

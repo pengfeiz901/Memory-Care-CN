@@ -22,3 +22,7 @@ Thumbs.db
 .vscode/
 .idea/
 
+# docs
+DATA_SOURCE_ANALYSIS.md
+PROJECT_GUIDE.md
+changes.patch

@@ -185,11 +185,11 @@ reply = chat(
 ## 🐛 调试命令
 
 ```bash
-# 检查后端健康
-curl http://127.0.0.1:8000/health
+# 检查MemMachine 健康
+curl http://127.0.0.1:8080/health
 
-# 查看 API 文档
-# 浏览器访问: http://127.0.0.1:8000/docs
+# 查看 MemMachine API 文档
+# 浏览器访问: http://127.0.0.1:8080/docs
 
 # 查看数据库（需要 SQLite 工具）
 sqlite3 app.db
@@ -227,113 +227,19 @@ SELECT * FROM patient;
 
 ```bash
 # .env 文件需要配置
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4o-mini
+# OpenAI API 配置
+OPENAI_API_KEY=[Your API Key]
+OPENAI_BASE_URL=[LLM BASE URL]
+OPENAI_MODEL=[LLM MODEL]
+
+# MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
 MEMMACHINE_BASE_URL=http://localhost:8080
 ```
 
----
-
-## 🔄 启动流程
-
-### 方式一：传统方式启动
-
-```bash
-# 1. 安装依赖
-pip install -r requirements.txt
-
-# 2. 配置环境变量（创建 .env 文件）
-
-# 3. 启动 MemMachine 服务
-
-# 4. 启动后端（终端 1）
-uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
-
-# 5. 启动前端（终端 2）
-streamlit run ui/streamlit_app.py
-```
-
-### 方式二：Docker 方式启动（推荐）
-
-```bash
-# 1. 配置环境变量（创建 .env 文件）
-
-# 2. 启动 MemMachine 服务
-
-# 3. 一键启动所有服务
-chmod +x docker-compose.sh
-./docker-compose.sh
-```
-
-**访问地址：**
-- 前端应用：http://localhost:8501
-- 后端 API：http://localhost:8000
-- API 文档：http://localhost:8000/docs
-
-**Docker 相关命令：**
-```bash
-# 查看服务状态
-docker-compose ps
-
-# 查看服务日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-
-# 重启服务
-docker-compose restart
-```
-
-**常见问题解决：**
-- 如果启动失败，检查是否已有服务占用8000端口：
-  ```bash
-  sudo netstat -tulpn | grep :8000
-  # 如有占用，终止相应进程
-  sudo kill <PID>
-  ```
-- 如果遇到 Docker 权限问题：
-  ```bash
-  # 将用户添加到 docker 组
-  sudo groupadd docker 2>/dev/null; sudo usermod -aG docker $USER
-  # 或使用 sudo 运行脚本
-  sudo ./docker-compose.sh
-  ```
-- 如果出现与 MemMachine 服务连接相关的错误：
-  ```bash
-  # 确保 MemMachine 服务正在运行
-  curl http://localhost:8080/health
-  # 如果服务未运行，请先启动 MemMachine 服务
-  # 然后重新启动 MemoryCare Docker 容器
-  ```
-
-- MemMachine 服务安装和启动：
-  ```bash
-  # 1. 进入 MemMachine 目录
-  cd /memverge/MeetUp/MemMachine-MemMachine-dab4fdf
-  
-  # 2. 配置环境变量
-  cp sample_configs/env.dockercompose .env
-  # 编辑 .env 文件，添加 OPENAI_API_KEY
-  
-  # 3. 配置 MemMachine 服务
-  cp sample_configs/episodic_memory_config.sample configuration.yml
-  # 编辑 configuration.yml 文件，更新 API 密钥和密码
-  
-  # 4. 启动 MemMachine 服务
-  ./memmachine-compose.sh  # 推荐使用脚本
-  # 或 docker-compose up -d
-  
-  # 5. 验证服务状态
-  curl http://localhost:8080/health
-  ```
-
----
 
 ## 📞 获取帮助
 
 - 详细文档：查看 `PROJECT_GUIDE.md`
-- API 文档：http://127.0.0.1:8000/docs
 - 代码注释：所有文件都有详细中文注释
 
 ---
