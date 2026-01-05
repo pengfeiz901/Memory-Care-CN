@@ -192,10 +192,41 @@ curl http://127.0.0.1:8080/health
 # 浏览器访问: http://127.0.0.1:8080/docs
 
 # 查看数据库（需要 SQLite 工具）
-sqlite3 app.db
+sqlite3 data/app.db
 .tables
 SELECT * FROM patient;
 ```
+
+## 💾 数据库问题解决
+
+### 在 macOS 上部署时遇到 "unable to open database file" 错误
+
+**问题原因**: Docker 容器在 macOS 上挂载单个 SQLite 文件时可能出现权限或路径问题，导致 SQLite 无法正确创建或访问数据库文件。
+
+**解决方案**:
+1. 修改 `docker-compose.yml` 将挂载单个文件改为挂载整个目录：
+   ```yaml
+   volumes:
+     - ./data:/app/data  # 挂载整个数据目录而不是单个文件
+     - ./.env:/app/.env
+   ```
+
+2. 修改 `utils/db.py` 中的数据库 URL：
+   ```python
+   DB_URL = "sqlite:///data/app.db"  # 指向数据目录中的数据库文件
+   ```
+
+3. 创建数据目录：
+   ```bash
+   mkdir -p data
+   ```
+
+4. 重建并启动容器：
+   ```bash
+   sudo docker compose down
+   sudo docker compose build
+   sudo docker compose up -d
+   ```
 
 ---
 
@@ -222,19 +253,6 @@ SELECT * FROM patient;
 | 会话状态 | `ui/streamlit_app.py` | 文件开头初始化部分 |
 
 ---
-
-## ⚙️ 环境变量
-
-```bash
-# .env 文件需要配置
-# OpenAI API 配置
-OPENAI_API_KEY=[Your API Key]
-OPENAI_BASE_URL=[LLM BASE URL]
-OPENAI_MODEL=[LLM MODEL]
-
-# MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
-MEMMACHINE_BASE_URL=http://localhost:8080
-```
 
 
 ## 📞 获取帮助

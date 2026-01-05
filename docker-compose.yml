@@ -13,7 +13,7 @@ services:
     extra_hosts:
       - "host.docker.internal:172.17.0.1"
     volumes:
-      - ./app.db:/app/app.db
+      - ./data:/app/data  # 挂载整个数据目录而不是单个文件
       - ./.env:/app/.env
     restart: always
     networks:
