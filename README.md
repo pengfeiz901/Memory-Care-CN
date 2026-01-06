@@ -1,3 +1,23 @@
+## ⚙️ 环境变量
+
+```bash
+# .env 文件需要配置
+# OpenAI API 配置
+OPENAI_API_KEY=[Your API Key]
+OPENAI_BASE_URL=[LLM BASE URL]
+OPENAI_MODEL=[LLM MODEL]
+
+# MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
+MEMMACHINE_BASE_URL=http://localhost:8080
+```
+
+# 1. 配置环境变量（创建 .env 文件）
+参考上面的例子，创建一个 .env 文件，配置好环境变量。
+
+# 2. 安装 MemMachine
+参考安装步骤 - https://ai.feishu.cn/wiki/DbdNwIFmdieADrkuge8cBZe1nXb?from=from_copylink
+
+
 ## 🔄 启动流程
 
 ### 方式一：传统方式启动
@@ -18,27 +38,7 @@ streamlit run ui/streamlit_app.py
 ```
 
 ### 方式二：Docker 方式启动（推荐）
-
-## ⚙️ 环境变量
-
-```bash
-# .env 文件需要配置
-# OpenAI API 配置
-OPENAI_API_KEY=[Your API Key]
-OPENAI_BASE_URL=[LLM BASE URL]
-OPENAI_MODEL=[LLM MODEL]
-
-# MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
-MEMMACHINE_BASE_URL=http://localhost:8080
-```
-
-# 1. 配置环境变量（创建 .env 文件）
-参考上面的例子，创建一个 .env 文件，配置好环境变量。
-
-# 2. 安装 MemMachine
-参考安装步骤 - https://ai.feishu.cn/wiki/DbdNwIFmdieADrkuge8cBZe1nXb?from=from_copylink
-
-# 3. 一键启动所有服务
+# 一键启动所有服务
 ```bash
 chmod +x docker-compose.sh
 ./docker-compose.sh
