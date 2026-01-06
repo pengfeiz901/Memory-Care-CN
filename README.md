@@ -119,6 +119,12 @@ docker-compose restart
 
 ---
 
+TODO List:
+- 支持医生端注册新用户
+- 优化前端界面，改善用户体验
+
+---
+
 # 💙 MemoryCare - AI Companion for Dementia & Alzheimer's Care
 
 > **Dementia care powered by memories that last—because every moment matters**
