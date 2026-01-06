@@ -39,7 +39,7 @@ MEMMACHINE_BASE_URL=$MEMMACHINE_SERVICE_PROTOCOL://$MEMMACHINE_SERVICE_HOST:$MEM
 参考安装步骤 - https://ai.feishu.cn/wiki/DbdNwIFmdieADrkuge8cBZe1nXb?from=from_copylink
 
 
-## 🔄 启动流程
+## 3 🔄 Agent 启动流程
 
 ### 方式一：传统方式启动
 
