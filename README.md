@@ -7,8 +7,29 @@ OPENAI_API_KEY=[Your API Key]
 OPENAI_BASE_URL=[LLM BASE URL]
 OPENAI_MODEL=[LLM MODEL]
 
+# MemMachine 服务配置（根据实际情况选择一种）
+
+# 目标服务配置（根据实际情况选择一种）
+# 选项1：本地容器网络（当目标服务在同一个docker-compose中）
+# TARGET_SERVICE_HOST=target-service
+# TARGET_SERVICE_PORT=8080
+# TARGET_SERVICE_PROTOCOL=http
+
+# 选项2：本地宿主机（当目标服务运行在宿主机上）
+MEMMACHINE_SERVICE_HOST=host.docker.internal
+MEMMACHINE_SERVICE_PORT=8080
+MEMMACHINE_SERVICE_PROTOCOL=http
+
+# 选项3：远程服务器
+# MEMMACHINE_SERVICE_HOST=api.example.com
+# MEMMACHINE_SERVICE_PORT=8080
+# MEMMACHINE_SERVICE_PROTOCOL=http
+
+# 选项4：完整的URL（直接覆盖所有上述设置）
+# MEMMACHINE_SERVICE_FULL_URL=http://192.168.1.100:8080
+
 # MemMachine 配置（如果 MemMachine 不在本地 8080 端口, 请修改为实际地址）
-MEMMACHINE_BASE_URL=http://localhost:8080
+MEMMACHINE_BASE_URL=$MEMMACHINE_SERVICE_PROTOCOL://$MEMMACHINE_SERVICE_HOST:$MEMMACHINE_SERVICE_PORT
 ```
 
 # 1. 配置环境变量（创建 .env 文件）
