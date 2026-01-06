@@ -59,7 +59,7 @@ streamlit run ui/streamlit_app.py
 ```
 
 ### 方式二：Docker 方式启动（推荐）
-# 一键启动所有服务
+一键启动所有服务
 ```bash
 chmod +x docker-compose.sh
 ./docker-compose.sh
